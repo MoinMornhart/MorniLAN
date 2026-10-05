@@ -24,12 +24,13 @@ Kontext für Claude Code. Die vollständige Anforderung steht in [docs/anforderu
 | Lizenz | MIT |
 | Proxmox-Quickstart | nein |
 | Auto-Update | Velopack über GitHub Releases (öffentlich → kein Token), noch umzusetzen in M9 |
-| Kommunikation (M2) | **noch offen.** Vorschlag: ASP.NET Core + SignalR über TLS, Kestrel im Admin-Panel, der Agent verbindet sich ausgehend, Pairing-Code und danach Zertifikat-Pinning (gegenseitig). Vor M2 kurz mit dem Nutzer bestätigen. |
+| Kommunikation (M2) | ASP.NET Core + SignalR über TLS, **Kestrel im Admin-Panel** (47950/TCP), der Agent verbindet sich ausgehend. LAN-Erkennung: Admin-Panel sendet UDP-Broadcast (47951/UDP), der Agent lauscht. Tailscale: Adresse (IP/MagicDNS) manuell eintragen, keine Tailscale-API. Pairing-Code erscheint im Agent-Log (später auch im Launcher) und wird im Admin-Panel eingegeben, danach gegenseitiges Zertifikat-Pinning. Heartbeat alle 15 s, offline nach 45 s. |
 
 ## Stand
 
-- **M1 Grundgerüst: fertig**, auf `dev` gemergt, CI grün (42 Tests). **Abnahme durch den Nutzer steht noch aus**, danach `dev` → `main` mergen.
-- Als Nächstes: **M2 Verbindung** (Agent ↔ Admin, Pairing, Online-Status, Heartbeat; erst LAN mit mDNS/UDP-Broadcast, dann Tailscale).
+- **M1 Grundgerüst: fertig und abgenommen** (2026-10-05), nach `main` gemergt, CI grün (42 Tests).
+- **M2 Verbindung: in Arbeit** auf `feature/m2-verbindung`.
+- Testaufbau: Admin-Panel auf dem Haupt-PC des Nutzers. Als „Freundes-PC“ dient sein alter PC mit **Windows 11 Home** im WLAN. Bis der bereitsteht, laufen Agent und Admin zusammen auf dem Laptop.
 - Danach kommen M3–M12 gemäß [docs/anforderungen.md](docs/anforderungen.md#meilensteine). Bei M12 nach der Reihenfolge der Extras fragen.
 
 ## Technik & Stolperfallen
