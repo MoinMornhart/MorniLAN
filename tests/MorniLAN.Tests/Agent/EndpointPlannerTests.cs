@@ -54,6 +54,19 @@ public class EndpointPlannerTests
     }
 
     [Fact]
+    public void Unpaired_BehindRepeater_AlsoTriesAddressesFromBeacon()
+    {
+        // Repeater im NAT-Modus: Paket kommt von .2, das Panel selbst hat .22.
+        var seen = new SeenBeacon(DiscoveryBeacon.ForAdmin("X", 47950, Other, ["192.168.178.22"]),
+            IPAddress.Parse("192.168.178.2"), DateTimeOffset.UtcNow);
+
+        var plan = EndpointPlanner.Plan(Unpaired, null, 47950, [seen]);
+
+        Assert.Equal(["192.168.178.2", "192.168.178.22"], plan.Select(e => e.Host));
+        Assert.All(plan, e => Assert.Equal(Other, e.ExpectedFingerprint));
+    }
+
+    [Fact]
     public void Paired_WithoutLan_StillKnowsTailscaleAddress()
     {
         var plan = EndpointPlanner.Plan(Paired, null, 47950, []);

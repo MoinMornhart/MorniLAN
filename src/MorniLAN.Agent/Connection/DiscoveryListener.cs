@@ -122,8 +122,8 @@ internal sealed class DiscoveryListener(IOptions<AgentConnectionOptions> options
         _seen[key] = seen;
         if (!isNew)
             return;
-        logger.LogInformation("Admin-Panel {Name} im LAN gefunden: {Address}:{Port}", seen.Beacon.Name, seen.Address,
-            seen.Beacon.Port);
+        logger.LogInformation("Admin-Panel {Name} im LAN gefunden: {Address}:{Port} (meldet {Addresses})",
+            seen.Beacon.Name, seen.Address, seen.Beacon.Port, string.Join(", ", seen.Beacon.ValidAddresses()));
         Interlocked.Exchange(ref _signal, new(TaskCreationOptions.RunContinuationsAsynchronously)).TrySetResult();
     }
 }
