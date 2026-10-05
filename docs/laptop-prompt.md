@@ -1,36 +1,57 @@
 # Prompt für Claude Code auf dem Laptop
 
-Den Text im Block unten komplett in Claude Code auf dem Laptop einfügen. Claude Code vorher im Projektordner öffnen:
-`%USERPROFILE%\iCloudDrive\Morni Archiv\Projekte\MorniLAN`
+Den Text im Block unten komplett in Claude Code einfügen. Er funktioniert auch dann, wenn iCloud den Projektordner noch nicht synchronisiert hat.
 
 ```text
-Wir machen am Projekt MorniLAN weiter, das ich auf meinem anderen PC mit dir begonnen habe.
-Projektordner: %USERPROFILE%\iCloudDrive\Morni Archiv\Projekte\MorniLAN
-GitHub (öffentlich): https://github.com/MoinMornhart/MorniLAN, Arbeits-Branch: dev
+Wir machen am Projekt "MorniLAN" weiter, das ich auf meinem anderen PC mit dir begonnen habe.
+Name der App: MorniLAN. Sprich Deutsch mit mir.
 
-1. Lies zuerst CLAUDE.md und docs/anforderungen.md komplett. Dort stehen Arbeitsweise,
-   alle bisherigen Entscheidungen, der Stand und die Stolperfallen. Frag mich nichts erneut,
-   was dort schon entschieden ist.
+KURZ ZUM PROJEKT
+Ich verwalte einen Windows-PC, den ein Freund nutzt. Drei Komponenten (.NET 10, C#, Avalonia 12):
+- MorniLAN.Agent: Windows-Dienst auf dem Freundes-PC (Status, Steam-Erkennung, Sperren, Befehle, Selbst-Update)
+- MorniLAN.Launcher: Shell-Ersatz für das Konto des Freundes, zeigt nur freigegebene Apps/Spiele
+- MorniLAN.Admin: Admin-Panel auf meinem PC (Freigaben, Status, Fernzugriff, Aktionen)
+Plus MorniLAN.Shared und MorniLAN.Tests. Die vollständige Anforderung steht im Repo
+in docs/anforderungen.md, Arbeitsweise, Entscheidungen, Stand und Stolperfallen in CLAUDE.md.
 
-2. Prüfe das Repo:
-   - Der Ordner wird per iCloud synchronisiert. Stelle sicher, dass alle Dateien lokal
-     vorhanden sind (keine reinen Online-Platzhalter) und dass `git status` und
-     `git fetch origin` sauber laufen.
-   - Wenn .git kaputt oder unvollständig ist: Ordner sichern und das Repo frisch von GitHub
-     an dieselbe Stelle klonen, danach `git switch dev`.
-   - Stelle sicher, dass ich auf `dev` bin und auf dem Stand von origin/dev.
+ENTSCHEIDUNGEN (nicht erneut fragen)
+- Freundes-PC: Windows Home UND Pro unterstützen, Edition zur Laufzeit erkennen
+- Sperren: App Control (WDAC) bzw. AppLocker je nach Edition + immer ein Prozess-Wächter
+- UI: Avalonia 12 (Fluent, Dark Mode) | Fernzugriff: Sunshine + Moonlight
+- GitHub: öffentlich, https://github.com/MoinMornhart/MorniLAN | Lizenz: MIT | kein Proxmox-Guide
+- Auto-Update später mit Velopack über GitHub Releases
+- Git-Identität im Repo: MoinMornhart / 297179352+MoinMornhart@users.noreply.github.com
 
-3. Richte den Laptop ein: führe `./tools/setup-dev.ps1` aus. Es installiert bei Bedarf das
-   .NET 10 SDK, setzt die Git-Identität, baut alles und führt die Tests aus (erwartet: 42 bestanden).
-   Zeig mir, falls etwas fehlschlägt, und behebe es.
+ARBEITSWEISE
+- Kleine, testbare Meilensteine. Vorher Rückfragen, danach zeigen, was fertig ist,
+  plus kurze Test-Checkliste. Erst nach meiner Freigabe weiter.
+- Branches: main (stabil), dev (Entwicklung), feature/mN-<name> pro Meilenstein,
+  per --no-ff nach dev mergen. Conventional Commits auf Deutsch. Nach jedem Meilenstein
+  committen, pushen und prüfen, dass die GitHub-Actions-CI grün ist.
+- CLAUDE.md (Abschnitt "Stand") nach jedem Meilenstein aktualisieren.
 
-4. Meilenstein 1 abnehmen: Starte nacheinander Admin-Panel, Launcher und Agent
-   (siehe "Befehle" in CLAUDE.md) und gib mir die kurze Test-Checkliste für M1.
-   Wenn ich M1 freigebe: dev nach main mergen (--no-ff), pushen und prüfen, dass die CI grün ist.
+SCHRITT 1 – PROJEKT HOLEN
+Zielordner: %USERPROFILE%\iCloudDrive\Morni Archiv\Projekte\MorniLAN
+GitHub ist die verlässliche Quelle. iCloud hat das Projekt evtl. noch nicht (vollständig) synchronisiert.
+- Gibt es den Ordner nicht: git clone https://github.com/MoinMornhart/MorniLAN.git dorthin.
+- Gibt es ihn, aber ohne funktionierendes .git oder unvollständig: in "MorniLAN_icloud_alt"
+  umbenennen (nicht löschen) und frisch klonen. Sag mir Bescheid.
+- Gibt es ihn mit funktionierendem .git: git fetch origin und auf den Stand von origin/dev bringen.
+- Danach: git switch dev. Taucht später durch iCloud eine doppelte/ältere Kopie auf, gilt GitHub.
 
-5. Danach Meilenstein 2 (Verbindung Agent <-> Admin, Pairing, Heartbeat, erst LAN, dann Tailscale).
-   Stell mir vorher die nötigen Rückfragen, insbesondere zur Kommunikation:
-   Der Vorschlag in CLAUDE.md ist SignalR über TLS mit Pairing-Code und Zertifikat-Pinning.
-   Arbeite wie gehabt auf einem Branch feature/m2-verbindung und halte CLAUDE.md
-   (Abschnitt "Stand") nach jedem Meilenstein aktuell.
+SCHRITT 2 – LAPTOP EINRICHTEN
+Führe ./tools/setup-dev.ps1 aus. Es prüft Git und Speicherplatz, installiert bei Bedarf das
+.NET 10 SDK (winget, sonst ohne Admin-Rechte ins Benutzerprofil), setzt die Git-Identität und
+führt Build und Tests aus. Erwartet werden 42 bestandene Tests. Behebe Fehler und erklär sie mir.
+
+SCHRITT 3 – MEILENSTEIN 1 ABNEHMEN
+Starte Admin-Panel, Launcher und Agent (Befehle in CLAUDE.md) und gib mir die Test-Checkliste für M1.
+Wenn ich M1 freigebe: dev nach main mergen (--no-ff), pushen, CI prüfen.
+
+SCHRITT 4 – MEILENSTEIN 2
+Verbindung Agent <-> Admin mit Pairing, Online-Status und Heartbeat, erst im LAN
+(mDNS/UDP-Broadcast), dann über Tailscale. Stell mir vorher die nötigen Rückfragen.
+Vorschlag aus CLAUDE.md: ASP.NET Core + SignalR über TLS, Kestrel im Admin-Panel, der Agent
+verbindet sich ausgehend, Pairing-Code und danach gegenseitiges Zertifikat-Pinning.
+Arbeite auf feature/m2-verbindung.
 ```
