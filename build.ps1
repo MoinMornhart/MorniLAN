@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Build-Skript für MorniLAN.
 

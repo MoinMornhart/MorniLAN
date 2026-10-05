@@ -41,6 +41,7 @@ MorniLAN verwaltet einen Windows-PC, den ein Freund benutzt. Der Freund hat ein 
 ## Bauen
 
 Voraussetzung: [.NET 10 SDK](https://dotnet.microsoft.com/download) (`winget install Microsoft.DotNet.SDK.10`).
+Neuen Entwicklungsrechner einrichten: `./tools/setup-dev.ps1`. Es installiert das SDK bei Bedarf, setzt die Git-Identität und führt Build und Tests aus.
 
 ```powershell
 ./build.ps1                 # Build (Release)
