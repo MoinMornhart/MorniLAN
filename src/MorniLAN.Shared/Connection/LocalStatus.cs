@@ -29,13 +29,12 @@ public sealed record AgentLocalStatus(
 
 /// <summary>
 /// Lokaler Statuskanal Agent → Launcher über die Named Pipe <see cref="MorniLanConstants.LauncherPipeName"/>.
-/// Protokoll: eine Zeile "status" hin, eine Zeile JSON zurück. Nur lesend, es gibt keine Befehle,
-/// damit ein Standardbenutzer über die Pipe nichts verändern kann.
+/// Protokoll: Der Launcher verbindet sich NUR LESEND, der Agent schreibt sofort eine Zeile JSON und legt auf.
+/// Bewusst ohne Anfrage: Wer schreibend öffnet, verlangt unter Windows auch FILE_APPEND_DATA, und das ist bei
+/// Pipes das Recht, eigene Instanzen anzulegen. Das bekommen Standardbenutzer nicht (gegen Pipe-Squatting).
 /// </summary>
 public static class LocalStatusPipe
 {
-    public const string StatusRequest = "status";
-
     /// <summary>Fragt den Agent ab. null, wenn er nicht läuft oder nicht antwortet.</summary>
     public static async Task<AgentLocalStatus?> QueryAsync(TimeSpan timeout, CancellationToken cancellationToken = default,
         string pipeName = MorniLanConstants.LauncherPipeName)
@@ -44,11 +43,9 @@ public static class LocalStatusPipe
         cts.CancelAfter(timeout);
         try
         {
-            await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
+            await using var pipe = new NamedPipeClientStream(".", pipeName, PipeDirection.In, PipeOptions.Asynchronous);
             await pipe.ConnectAsync(cts.Token);
-            await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
             using var reader = new StreamReader(pipe, Encoding.UTF8, leaveOpen: true);
-            await writer.WriteLineAsync(StatusRequest.AsMemory(), cts.Token);
             var line = await reader.ReadLineAsync(cts.Token);
             return line is null ? null : JsonSerializer.Deserialize(line, MorniLanJsonContext.Default.AgentLocalStatus);
         }
