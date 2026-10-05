@@ -5,6 +5,11 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 
 ## [Unreleased]
 
+### Added
+- Programme und Spiele erkennen (M3.1): Der Agent meldet installierte Programme (Windows-Programmliste und Startmenü), Microsoft-Store-Apps und Steam-Spiele mit Icons und Steam-Covern. Systemkomponenten (Laufzeiten, Treiber-Tools, Windows-Werkzeuge) werden erkannt und ausgeblendet.
+- Admin-Panel: Seite „Freigaben“ mit Spiele-Covern, Programmliste, Suche, Filter, „Systemkomponenten anzeigen“ und „Neu einlesen“.
+- Die Liste wird nach dem Verbinden, alle 15 Minuten bei Änderungen und auf Wunsch übertragen; Bilder nur einmal, vom Panel geprüft.
+
 ## [0.2.0] – 2026-10-05
 
 ### Added
