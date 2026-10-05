@@ -109,6 +109,18 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
 - Installer: Inno Setup oder WiX. Ein Installer für Agent und Launcher (Freundes-PC), einer für das Admin-Panel.
 - Projektmappe mit `MorniLAN.Agent`, `MorniLAN.Launcher`, `MorniLAN.Admin`, `MorniLAN.Shared` und `MorniLAN.Tests`
 
+## Verteilung & Einrichtung (Wunsch des Nutzers, 2026-10-05)
+
+- **Zwei getrennte Apps** zum Herunterladen, jede mit eigenem Installer und eigenem GitHub-Release-Download:
+  - **MorniLAN Admin** für Admins: Admin-Panel auf dem eigenen PC.
+  - **MorniLAN für Geräte** für den verwalteten PC: Agent (Dienst) und Launcher in einem Paket. Der Nutzer sieht nur *eine* App, nicht zwei Programme.
+- **Einrichtung so einfach wie möglich**, ohne Konsole, PowerShell oder Build-Befehle:
+  - herunterladen, Doppelklick, Assistent folgen;
+  - Firewall-Regeln, Dienst und Autostart richtet der Installer selbst ein (nur eine UAC-Abfrage);
+  - Pairing-Code groß im Assistenten bzw. im Launcher anzeigen, das Admin-Panel findet das Gerät im LAN automatisch;
+  - Tailscale optional, im Assistenten erklärt;
+  - verständliche Fehlermeldungen statt Log-Dateien (z. B. „Netzwerk ist als Öffentlich eingestuft“).
+
 ## Meilensteine
 
 1. **Grundgerüst:** Projektmappe, Shared-Modelle, README, Git, Build-Skript. ✅
@@ -119,8 +131,8 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
 6. **Sperren durchsetzen:** AppLocker/WDAC bzw. Prozess-Wächter und Richtlinien setzen, inklusive Notfall-Entsperrung.
 7. **Fernzugriff:** Sunshine/Moonlight einbinden, „Verbinden“-Button und sichtbare Anzeige im Launcher.
 8. **Aktionen:** winget-Installation, Nachrichten, Neustart, „Hilfe anfordern“.
-9. **CI/CD & Auto-Update:** GitHub Actions, Releases, Selbst-Update mit Rollback.
-10. **Installer & Einrichtungsassistent:** Ein Assistent, der auf dem Freundes-PC das Benutzerkonto anlegt, den Agent installiert, die Shell setzt und das Pairing durchführt.
+9. **CI/CD & Auto-Update:** GitHub Actions, Releases, Selbst-Update mit Rollback. Zwei Downloads pro Release: *MorniLAN Admin* und *MorniLAN für Geräte* (siehe [Verteilung & Einrichtung](#verteilung--einrichtung-wunsch-des-nutzers-2026-10-05)).
+10. **Installer & Einrichtungsassistent:** Zwei Installer (Admin bzw. Gerät). Der Geräte-Assistent legt das Benutzerkonto an, installiert Agent und Launcher, richtet Dienst und Firewall ein, setzt die Shell und zeigt den Pairing-Code. Ziel: Einrichtung ohne Konsole.
 11. **Feinschliff:** Design, Fehlerbehandlung, Logs, Doku für den Admin.
 12. **Extras:** die Features aus „Weitere Features“, Reihenfolge erfragen.
 

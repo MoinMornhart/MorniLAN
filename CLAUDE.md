@@ -23,6 +23,7 @@ Kontext für Claude Code. Die vollständige Anforderung steht in [docs/anforderu
 | GitHub | **öffentlich**: https://github.com/MoinMornhart/MorniLAN |
 | Lizenz | MIT |
 | Proxmox-Quickstart | nein |
+| Verteilung (Wunsch 2026-10-05) | **Zwei Apps**: „MorniLAN Admin“ (Admin-PC) und „MorniLAN für Geräte“ (Agent + Launcher in einem Paket). Einrichtung muss **einfach** sein: Download, Doppelklick, Assistent, keine Konsole. Umsetzung in M9/M10, siehe [docs/anforderungen.md](docs/anforderungen.md#verteilung--einrichtung-wunsch-des-nutzers-2026-10-05). |
 | Auto-Update | Velopack über GitHub Releases (öffentlich → kein Token), noch umzusetzen in M9 |
 | Kommunikation (M2) | ASP.NET Core + SignalR über TLS, **Kestrel im Admin-Panel** (47950/TCP), der Agent verbindet sich ausgehend. LAN-Erkennung: Admin-Panel sendet UDP-Broadcast (47951/UDP), der Agent lauscht. Tailscale: Adresse (IP/MagicDNS) manuell eintragen, keine Tailscale-API. Pairing-Code erscheint im Agent-Log (später auch im Launcher) und wird im Admin-Panel eingegeben, danach gegenseitiges Zertifikat-Pinning. Heartbeat alle 15 s, offline nach 45 s. |
 
