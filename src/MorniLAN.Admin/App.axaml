@@ -5,4 +5,19 @@
   <Application.Styles>
     <FluentTheme />
   </Application.Styles>
+
+  <!-- Symbol im Infobereich: Panel läuft im Hintergrund weiter, damit PCs online gehen können -->
+  <TrayIcon.Icons>
+    <TrayIcons>
+      <TrayIcon Icon="/Assets/mornilan.ico" ToolTipText="MorniLAN Admin" Clicked="OnTrayClicked">
+        <TrayIcon.Menu>
+          <NativeMenu>
+            <NativeMenuItem Header="MorniLAN Admin öffnen" Click="OnTrayOpen" />
+            <NativeMenuItemSeparator />
+            <NativeMenuItem Header="Beenden" Click="OnTrayExit" />
+          </NativeMenu>
+        </TrayIcon.Menu>
+      </TrayIcon>
+    </TrayIcons>
+  </TrayIcon.Icons>
 </Application>

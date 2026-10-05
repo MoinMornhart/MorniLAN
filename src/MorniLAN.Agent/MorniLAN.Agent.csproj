@@ -5,6 +5,7 @@
     <OutputType>Exe</OutputType>
     <RootNamespace>MorniLAN.Agent</RootNamespace>
     <AssemblyName>MorniLAN.Agent</AssemblyName>
+    <ApplicationIcon>..\..\assets\mornilan.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
