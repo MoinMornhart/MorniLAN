@@ -22,7 +22,7 @@ internal static class EndpointPlanner
         if (state.Admin is { } admin)
         {
             foreach (var seen in beacons.Where(b => CertificateFingerprint.AreEqual(b.Beacon.Fingerprint, admin.Fingerprint)))
-                plan.Add(new AdminEndpoint(seen.Address.ToString(), seen.Beacon.Port, admin.Fingerprint, "LAN"));
+                plan.AddRange(FromBeacon(seen, admin.Fingerprint));
             if (admin.LastEndpoint is { } last)
                 plan.Add(new AdminEndpoint(last, admin.Port, admin.Fingerprint, "zuletzt"));
             if (configured is not null)
@@ -35,9 +35,14 @@ internal static class EndpointPlanner
             if (configured is not null)
                 plan.Add(new AdminEndpoint(configured, configuredPort, null, "Einstellung"));
             foreach (var seen in beacons)
-                plan.Add(new AdminEndpoint(seen.Address.ToString(), seen.Beacon.Port, seen.Beacon.Fingerprint, "LAN"));
+                plan.AddRange(FromBeacon(seen, seen.Beacon.Fingerprint));
         }
 
         return [.. plan.DistinctBy(e => (e.Host.ToLowerInvariant(), e.Port))];
     }
+
+    /// <summary>Erst die Absenderadresse, dann die Adressen, die das Panel selbst meldet (falls ein Repeater umschreibt).</summary>
+    private static IEnumerable<AdminEndpoint> FromBeacon(SeenBeacon seen, string fingerprint) =>
+        seen.Beacon.ValidAddresses().Prepend(seen.Address).Distinct()
+            .Select(ip => new AdminEndpoint(ip.ToString(), seen.Beacon.Port, fingerprint, "LAN"));
 }

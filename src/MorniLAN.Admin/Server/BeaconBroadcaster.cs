@@ -10,7 +10,7 @@ namespace MorniLAN.Admin.Server;
 /// </summary>
 internal sealed class BeaconBroadcaster(DiscoveryBeacon beacon, int port, ILogger logger)
 {
-    private readonly byte[] _payload = beacon.ToBytes();
+    private byte[] _payload = beacon.ToBytes();
     private readonly HashSet<string> _loggedErrors = [];
     private readonly HashSet<IPAddress> _answered = [];
 
@@ -47,6 +47,9 @@ internal sealed class BeaconBroadcaster(DiscoveryBeacon beacon, int port, ILogge
         {
             try
             {
+                // Adressen jedes Mal neu ermitteln, sie können sich ändern (DHCP, WLAN-Wechsel).
+                var addresses = NetworkInfo.LocalIPv4().Where(a => !a.IsTailscale).Select(a => a.Address.ToString());
+                _payload = (beacon with { Addresses = [.. addresses] }).ToBytes();
                 foreach (var target in NetworkInfo.BroadcastTargets())
                 {
                     try

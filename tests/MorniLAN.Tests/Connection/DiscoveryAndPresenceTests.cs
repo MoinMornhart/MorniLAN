@@ -29,6 +29,30 @@ public class DiscoveryBeaconTests
     }
 
     [Fact]
+    public void Beacon_CarriesOwnAddresses_AndIgnoresInvalidOnes()
+    {
+        var beacon = DiscoveryBeacon.ForAdmin("ADMIN-PC", 47950, Fp, ["192.168.178.22", "kaputt", "fe80::1", "10.0.0.5"]);
+        Assert.True(DiscoveryBeacon.TryParse(beacon.ToBytes(), out var parsed));
+        Assert.Equal(["192.168.178.22", "10.0.0.5"], parsed.ValidAddresses().Select(a => a.ToString()));
+    }
+
+    [Fact]
+    public void BeaconFromOlderPanel_WithoutAddresses_StillParses()
+    {
+        var json = $"{{\"kind\":\"mornilan-admin\",\"version\":1,\"name\":\"X\",\"port\":47950,\"fingerprint\":\"{Fp}\"}}";
+        Assert.True(DiscoveryBeacon.TryParse(Encoding.UTF8.GetBytes(json), out var parsed));
+        Assert.Empty(parsed.ValidAddresses());
+    }
+
+    [Fact]
+    public void Query_IsRecognized_AndIsNoBeacon()
+    {
+        Assert.True(DiscoveryBeacon.IsQuery(DiscoveryBeacon.Query));
+        Assert.False(DiscoveryBeacon.TryParse(DiscoveryBeacon.Query, out _));
+        Assert.False(DiscoveryBeacon.IsQuery(DiscoveryBeacon.ForAdmin("X", 1, Fp).ToBytes()));
+    }
+
+    [Fact]
     public void OversizedBeacon_IsIgnored()
     {
         Assert.False(DiscoveryBeacon.TryParse(new byte[4096], out _));
