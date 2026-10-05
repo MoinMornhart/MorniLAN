@@ -23,14 +23,18 @@ Kontext für Claude Code. Die vollständige Anforderung steht in [docs/anforderu
 | GitHub | **öffentlich**: https://github.com/MoinMornhart/MorniLAN |
 | Lizenz | MIT |
 | Proxmox-Quickstart | nein |
+| Verteilung (Wunsch 2026-10-05) | **Zwei Apps**: „MorniLAN Admin“ (Admin-PC) und „MorniLAN für Geräte“ (Agent + Launcher in einem Paket). Einrichtung muss **einfach** sein: Download, Doppelklick, Assistent, keine Konsole. Umsetzung in M9/M10, siehe [docs/anforderungen.md](docs/anforderungen.md#verteilung--einrichtung-wunsch-des-nutzers-2026-10-05). |
 | Auto-Update | Velopack über GitHub Releases (öffentlich → kein Token), noch umzusetzen in M9 |
 | Kommunikation (M2) | ASP.NET Core + SignalR über TLS, **Kestrel im Admin-Panel** (47950/TCP), der Agent verbindet sich ausgehend. LAN-Erkennung: Admin-Panel sendet UDP-Broadcast (47951/UDP), der Agent lauscht. Tailscale: Adresse (IP/MagicDNS) manuell eintragen, keine Tailscale-API. Pairing-Code erscheint im Agent-Log (später auch im Launcher) und wird im Admin-Panel eingegeben, danach gegenseitiges Zertifikat-Pinning. Heartbeat alle 15 s, offline nach 45 s. |
 
 ## Stand
 
 - **M1 Grundgerüst: fertig und abgenommen** (2026-10-05), nach `main` gemergt, CI grün (42 Tests).
-- **M2 Verbindung: in Arbeit** auf `feature/m2-verbindung`.
-- Testaufbau: Admin-Panel auf dem Haupt-PC des Nutzers. Als „Freundes-PC“ dient sein alter PC mit **Windows 11 Home** im WLAN. Bis der bereitsteht, laufen Agent und Admin zusammen auf dem Laptop.
+- **M2 Verbindung: fertig und abgenommen** (2026-10-05), nach `main` gemergt, CI grün (113 Tests inkl. Ende-zu-Ende über TLS und LAN-Suche). **Am 2026-10-05 mit zwei echten PCs im LAN getestet, alles grün**: Pairing (auch falscher Code), Online/CPU/RAM/Laufwerk, Agent beenden/neu starten, WLAN trennen, Panel neu starten, Entkoppeln → automatische Neu-Anfrage ohne feste Adresse. **Noch nicht getestet: Tailscale** (auf dem Test-PC nicht installiert). Der Nutzer hat M2 trotzdem freigegeben, der Tailscale-Test wird nachgeholt.
+- **M3 Programme & Steam erkennen: als Nächstes**, vorher Rückfragen stellen. Details: [docs/verbindung.md](docs/verbindung.md).
+- Testaufbau (Stand 2026-10-05, kann sich noch ändern): **Test-PC = „Freundes-PC“ ist der Rechner „MORNI“** (Windows 11 Pro, WLAN „MorniGaming“, 192.168.178.109). Agent liegt in `%LOCALAPPDATA%\MorniLAN\publish-neu\MorniLAN.Agent` und läuft dort **mit Admin-Rechten**, weil eine frühere Admin-Instanz Log und `agent-state.json` als Administratoren angelegt hat (ein normaler Prozess darf sie dann nicht schreiben; im Dienst-Betrieb kein Problem). **Haupt-PC „MOINMORNHART“** (LAN-Kabel, 192.168.178.22, Repo in `%USERPROFILE%\Dev\MorniLAN`, eigene Claude-Sitzung) betreibt das Panel. Dazwischen hängt ein **Repeater im NAT-Modus (192.168.178.2)**, der Absenderadressen umschreibt. Windows 11 Home ist noch nicht getestet.
+- Kleine offene Verbesserungen aus dem Test: Adressen aus dem eigenen Subnetz zuerst probieren (nach dem Entkoppeln dauerte es 12 s, weil erst .2 und 10.99.x ins Zeitlimit liefen). Dem Agent ein Log-Ziel geben, das er auch bei fremden Dateirechten beschreiben kann.
+- Noch offen aus M2, bewusst verschoben: Pairing-Code im Launcher (braucht die Named Pipe, kommt mit M4/M5), Agent als echter Dienst (Installer in M10), mDNS (UDP-Broadcast reicht).
 - Danach kommen M3–M12 gemäß [docs/anforderungen.md](docs/anforderungen.md#meilensteine). Bei M12 nach der Reihenfolge der Extras fragen.
 
 ## Technik & Stolperfallen
@@ -38,7 +42,13 @@ Kontext für Claude Code. Die vollständige Anforderung steht in [docs/anforderu
 - .NET 10 SDK, `global.json` mit `rollForward: latestFeature`. Lösung im neuen Format `MorniLAN.slnx`.
 - Version **nur** in `Directory.Build.props` (`VersionPrefix`), Paketversionen nur in `Directory.Packages.props` (Central Package Management, also keine `Version=` in den csproj).
 - Der Projektordner liegt in **iCloud Drive**. Build-Ausgaben gehen deshalb über `ArtifactsPath` nach `%LOCALAPPDATA%\MorniLAN\artifacts`, `build.ps1 -Task Publish` nach `%LOCALAPPDATA%\MorniLAN\publish`. Auf CI (`CI=true`) landet alles in `./artifacts`.
-- Tests: **xunit.v3 4.x mit Microsoft Testing Platform** (Opt-in in `global.json` unter `test.runner`). Kein VSTest, keine `Microsoft.NET.Test.Sdk`/`xunit.runner.visualstudio`/`coverlet.collector`. Aufruf: `dotnet test --solution MorniLAN.slnx`.
+- **iCloud und Git vertragen sich nicht**, wenn zwei PCs denselben Ordner synchronisieren. Am 2026-10-05 hat iCloud Konfliktkopien angelegt (`CLAUDE 2.md`, `Directory.Packages(1).props`) und sogar Git-Interna umbenannt (`.git/HEAD 2`, `index 2`), danach war das Repo kaputt. Der alte Ordner liegt als `MorniLAN_icloud_alt`, es wurde frisch geklont. **GitHub ist die Quelle.** Vor der Arbeit immer `git status` prüfen; bei Konfliktkopien nicht weiterarbeiten, sondern neu klonen.
+- Tests: **xunit.v3 4.x mit Microsoft Testing Platform** (Opt-in in `global.json` unter `test.runner`). Kein VSTest, keine `Microsoft.NET.Test.Sdk`/`xunit.runner.visualstudio`/`coverlet.collector`. Aufruf: `dotnet test --solution MorniLAN.slnx`, und zwar **im Repo-Ordner** (sonst wird `global.json` nicht gefunden → „MSB1001: Unbekannter Schalter --solution“). `build.ps1` macht das selbst.
+- Verbindung (M2): Admin-Panel hostet Kestrel per `FrameworkReference Microsoft.AspNetCore.App` in der Avalonia-App (`Server/AdminServer.cs`), Tests referenzieren das Admin-Projekt. Zertifikate **nicht** mit `EphemeralKeySet` laden, SChannel braucht einen gespeicherten Schlüssel. Identitäten sind per DPAPI (CurrentUser) ans Konto gebunden: Wechselt der Agent zwischen Konsole (Benutzer) und Dienst (SYSTEM), entsteht ein neues Zertifikat → neues Pairing nötig.
+- Der SignalR-Client nutzt nur WebSockets ohne Negotiate (`SkipNegotiation`), deshalb werden Client-Zertifikat und Prüf-Callback in `WebSocketConfiguration` gesetzt.
+- Firewall: `tools/firewall.ps1 -Role Admin|Agent`. Windows fragt beim ersten Lauschen nach. „Abbrechen“ erzeugt Blockier-Regeln, die das Skript entfernt. Regeln gelten für jedes Profil (die Netze des Nutzers sind „Öffentlich“), aber nur für `LocalSubnet`.
+- LAN-Suche: Broadcasts vom Kabel-LAN kommen beim Nutzer **nicht** im WLAN an (Router). Deshalb fragt der Agent selbst per Broadcast (WLAN → LAN geht), und das Panel antwortet per Unicast. UDP-Sockets mit `SIO_UDP_CONNRESET` aus, sonst bricht das Empfangen nach ICMP „Port nicht erreichbar“ ab (`NetworkInfo.OpenDiscoverySocket`).
+- Agent läuft nur einmal pro PC (Mutex `Global\MorniLAN.Agent`).
 - CI (`.github/workflows/ci.yml`) läuft auf Pushes nach `main`, `dev`, `feature/**`, `fix/**` und auf PRs (windows-latest). Weitere Branch-Präfixe dort ergänzen.
 - Agent-Namespaces nie `System` nennen (überdeckt `System.*`), deshalb heißt der Ordner `Platform/`.
 - `.ps1`-Dateien als **UTF-8 mit BOM** speichern, sonst werden Umlaute in Windows PowerShell 5.1 kaputt dargestellt.
@@ -49,6 +59,8 @@ Kontext für Claude Code. Die vollständige Anforderung steht in [docs/anforderu
 ```powershell
 ./tools/setup-dev.ps1        # Rechner einrichten (SDK, Git-Identität, Build + Tests)
 ./build.ps1 -Task Test       # Build + Tests
+./build.ps1 -Task Publish    # self-contained Exe-Dateien (für den Test-PC), inkl. firewall.ps1
+./tools/firewall.ps1 -Role Admin   # bzw. -Role Agent, als Administrator
 dotnet run --project src/MorniLAN.Admin
 dotnet run --project src/MorniLAN.Launcher
 dotnet run --project src/MorniLAN.Agent   # Konsole; Logs: %ProgramData%\MorniLAN\logs

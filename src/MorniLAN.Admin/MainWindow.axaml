@@ -1,10 +1,31 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:MorniLAN.Admin.ViewModels"
         x:Class="MorniLAN.Admin.MainWindow"
+        x:DataType="vm:MainViewModel"
         Title="MorniLAN Admin"
         Width="1200" Height="760" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterScreen">
-  <!-- Grundgerüst für Meilenstein 1. Die Bereiche werden ab Meilenstein 2 mit Leben gefüllt. -->
+
+  <Window.Styles>
+    <Style Selector="Border.card">
+      <Setter Property="Background" Value="#1A1E26" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="Padding" Value="20" />
+    </Style>
+    <Style Selector="Border.pending">
+      <Setter Property="BorderBrush" Value="#4C8DFF" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.muted">
+      <Setter Property="Foreground" Value="#9AA3B2" />
+    </Style>
+    <Style Selector="TextBlock.label">
+      <Setter Property="Foreground" Value="#5C6575" />
+      <Setter Property="FontSize" Value="11" />
+    </Style>
+  </Window.Styles>
+
   <Grid ColumnDefinitions="220,*">
     <Border Grid.Column="0" Background="#15181E" Padding="12">
       <DockPanel>
@@ -12,8 +33,8 @@
           <TextBlock Text="MorniLAN" FontSize="22" FontWeight="Bold" />
           <TextBlock Text="Admin-Panel" FontSize="12" Foreground="#9AA3B2" />
         </StackPanel>
-        <TextBlock x:Name="VersionText" DockPanel.Dock="Bottom" Margin="8" FontSize="11" Foreground="#5C6575" />
-        <ListBox x:Name="Navigation" SelectedIndex="0" Background="Transparent">
+        <TextBlock DockPanel.Dock="Bottom" Margin="8" FontSize="11" Foreground="#5C6575" Text="{Binding Version}" />
+        <ListBox SelectedIndex="{Binding SelectedNavIndex}" Background="Transparent">
           <ListBoxItem Content="Übersicht" />
           <ListBoxItem Content="Freigaben" />
           <ListBoxItem Content="Fernzugriff" />
@@ -22,9 +43,102 @@
         </ListBox>
       </DockPanel>
     </Border>
-    <StackPanel Grid.Column="1" Margin="32" Spacing="8">
-      <TextBlock Text="Übersicht" FontSize="28" FontWeight="SemiBold" />
-      <TextBlock Text="Noch kein PC gekoppelt. Das Pairing folgt in Meilenstein 2." Foreground="#9AA3B2" />
-    </StackPanel>
+
+    <ScrollViewer Grid.Column="1">
+      <Panel Margin="32">
+
+        <!-- Übersicht -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsOverview}">
+          <TextBlock Text="Übersicht" FontSize="28" FontWeight="SemiBold" />
+
+          <Border Classes="card" Padding="16">
+            <Grid ColumnDefinitions="Auto,*">
+              <Ellipse Width="10" Height="10" Margin="0,5,12,0" VerticalAlignment="Top" Fill="{Binding ServerBrush}" />
+              <StackPanel Grid.Column="1" Spacing="2">
+                <TextBlock Text="{Binding ServerStatus}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding ServerDetails}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <ItemsControl ItemsSource="{Binding PendingPairings}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="12" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:PendingPairingViewModel">
+                <Border Classes="card pending">
+                  <StackPanel Spacing="10">
+                    <TextBlock Text="{Binding Title}" FontSize="18" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding Details}" Classes="muted" TextWrapping="Wrap" />
+                    <TextBlock Text="Gib den Pairing-Code ein, den der Agent auf dem PC anzeigt:" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBox Text="{Binding Code}" PlaceholderText="XXXX-XXXX" Width="170" MaxLength="12"
+                               FontFamily="Consolas" FontSize="18" />
+                      <Button Content="Koppeln" Classes="accent" Command="{Binding PairCommand}" IsDefault="True" />
+                      <Button Content="Ablehnen" Command="{Binding RejectCommand}" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding Error}" Foreground="#FF6B6B" IsVisible="{Binding HasError}" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <TextBlock Text="Gekoppelte PCs" FontSize="18" FontWeight="SemiBold" Margin="0,8,0,0" />
+          <TextBlock IsVisible="{Binding HasNoDevices}" Classes="muted" TextWrapping="Wrap"
+                     Text="Noch kein PC gekoppelt. Starte den Agent auf dem PC – er findet das Panel im LAN und zeigt einen Pairing-Code an." />
+
+          <ItemsControl ItemsSource="{Binding Devices}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Spacing="12" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:DeviceViewModel">
+                <Border Classes="card">
+                  <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                    <Ellipse Width="12" Height="12" Margin="0,8,14,0" VerticalAlignment="Top"
+                             Fill="{Binding StatusBrush}" />
+                    <StackPanel Grid.Column="1" Spacing="2">
+                      <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding StatusText}" />
+                      <TextBlock Text="{Binding Details}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button Grid.Column="2" VerticalAlignment="Top" Content="{Binding UnpairText}"
+                            Command="{Binding UnpairCommand}" />
+
+                    <UniformGrid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Columns="3" Margin="0,14,0,0">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="CPU" Classes="label" />
+                        <TextBlock Text="{Binding Cpu}" />
+                      </StackPanel>
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="ARBEITSSPEICHER" Classes="label" />
+                        <TextBlock Text="{Binding Ram}" />
+                      </StackPanel>
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="SYSTEMLAUFWERK" Classes="label" />
+                        <TextBlock Text="{Binding Disk}" />
+                      </StackPanel>
+                    </UniformGrid>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Noch nicht umgesetzte Bereiche -->
+        <StackPanel Spacing="8" IsVisible="{Binding !IsOverview}">
+          <TextBlock Text="{Binding PageTitle}" FontSize="28" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding PagePlaceholder}" Classes="muted" />
+        </StackPanel>
+
+      </Panel>
+    </ScrollViewer>
   </Grid>
 </Window>
