@@ -71,13 +71,15 @@ function Invoke-Publish {
         # Alte Dateien entfernen, damit keine Reste im Installer landen.
         if (Test-Path $out) { Remove-Item $out -Recurse -Force }
         Invoke-Dotnet publish $proj -c $Configuration -r win-x64 --self-contained `
-            -p:PublishSingleFile=true -o $out @versionArgs
+            /p:PublishSingleFile=true -o $out @versionArgs
     }
     Write-Host "==> Ausgabe: $publishDir" -ForegroundColor Green
 }
 
 $dotnet = Find-Dotnet
-$versionArgs = if ($VersionSuffix) { @("-p:VersionSuffix=$VersionSuffix") } else { @() }
+# @(...) außen: Ein if-Block gibt ein Ein-Element-Array als einzelnen String zurück, der beim
+# Splatten in Buchstaben zerfiele.
+$versionArgs = @(if ($VersionSuffix) { "/p:VersionSuffix=$VersionSuffix" })
 
 Write-Host "==> MorniLAN | $Task | $Configuration" -ForegroundColor Cyan
 
