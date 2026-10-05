@@ -56,7 +56,7 @@ switch ($Task) {
     }
     'Test' {
         Invoke-Dotnet build $solution -c $Configuration @versionArgs
-        Invoke-Dotnet test $solution -c $Configuration --no-build
+        Invoke-Dotnet test --solution $solution -c $Configuration --no-build
     }
     'Publish' {
         foreach ($app in $apps) {
