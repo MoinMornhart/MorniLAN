@@ -27,6 +27,7 @@ public partial class App : Application
             desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
             _viewModel = new MainViewModel();
             var viewModel = _viewModel;
+            viewModel.RequestExit = () => Dispatcher.UIThread.Post(Exit);
             // Server außerhalb des UI-Threads stoppen, sonst blockieren sich die Fortsetzungen gegenseitig.
             desktop.Exit += (_, _) => Task.Run(() => viewModel.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(5));
 

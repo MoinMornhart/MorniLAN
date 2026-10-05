@@ -24,4 +24,19 @@ public static class AppId
     }
 
     public static string ForCustom(Guid id) => $"custom:{id:N}";
+
+    /// <summary>Store-App über ihre AppUserModelId (Familienname + App-ID, versionsunabhängig).</summary>
+    public static string ForStoreApp(string appUserModelId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(appUserModelId);
+        return $"store:{appUserModelId.Trim().ToLowerInvariant()}";
+    }
+
+    /// <summary>Programm ohne bekannte EXE, über seinen Uninstall-Schlüssel (z. B. "{GUID}" oder "Discord").</summary>
+    public static string ForUninstallKey(string keyName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(keyName);
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(keyName.Trim().ToUpperInvariant()));
+        return $"prog:{Convert.ToHexStringLower(hash.AsSpan(0, 8))}";
+    }
 }

@@ -17,6 +17,7 @@ public sealed record AddressItem(string Kind, string Address);
 
 public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
+    private const int AppsPage = 1;
     private const int DiagnosticsPage = 4;
     private const int SettingsPage = 5;
 
@@ -24,7 +25,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private static readonly string[] Placeholders =
     [
         "",
-        "Programme und Spiele freigeben folgt in Meilenstein 3 und 4.",
+        "",
         "Fernzugriff mit Sunshine und Moonlight folgt in Meilenstein 7.",
         "Aktionen (Installieren, Nachricht, Neustart) folgen in Meilenstein 8.",
         "",
@@ -33,17 +34,24 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private readonly DispatcherTimer _presenceTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private AdminSettings _settings = AdminSettings.Load();
+    private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
+    private readonly AdminUpdater _updater = new();
     private AdminServer? _server;
 
     public MainViewModel()
     {
         _presenceTimer.Tick += (_, _) => Refresh();
+        _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync();
         Diagnostics = new DiagnosticsViewModel(() => _server);
+        Apps = new AppsViewModel(() => _server);
         StartWithWindows = Autostart.IsEnabled();
         KeepRunningInTray = _settings.KeepRunningInTray;
     }
 
     public string Version => VersionInfo.Display;
+
+    /// <summary>Von der App gesetzt: das Panel beenden (nach dem Start eines Updates).</summary>
+    public Action? RequestExit { get; set; }
 
     /// <summary>Vom Fenster gesetzt: Text in die Zwischenablage legen.</summary>
     public Func<string, Task>? CopyToClipboard { get; set; }
@@ -52,18 +60,20 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<PendingPairingViewModel> PendingPairings { get; } = [];
     public ObservableCollection<AddressItem> Addresses { get; } = [];
     public DiagnosticsViewModel Diagnostics { get; }
+    public AppsViewModel Apps { get; }
 
     // --- Navigation ---------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsOverview), nameof(IsDiagnostics), nameof(IsSettings), nameof(IsPlaceholder),
+    [NotifyPropertyChangedFor(nameof(IsOverview), nameof(IsApps), nameof(IsDiagnostics), nameof(IsSettings), nameof(IsPlaceholder),
         nameof(PageTitle), nameof(PagePlaceholder))]
     public partial int SelectedNavIndex { get; set; }
 
     public bool IsOverview => SelectedNavIndex <= 0;
+    public bool IsApps => SelectedNavIndex == AppsPage;
     public bool IsDiagnostics => SelectedNavIndex == DiagnosticsPage;
     public bool IsSettings => SelectedNavIndex == SettingsPage;
-    public bool IsPlaceholder => !IsOverview && !IsDiagnostics && !IsSettings;
+    public bool IsPlaceholder => !IsOverview && !IsApps && !IsDiagnostics && !IsSettings;
     public string PageTitle => Pages[Math.Clamp(SelectedNavIndex, 0, Pages.Length - 1)];
     public string PagePlaceholder => Placeholders[Math.Clamp(SelectedNavIndex, 0, Placeholders.Length - 1)];
 
@@ -71,6 +81,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     {
         if (value == DiagnosticsPage)
             _ = Diagnostics.RefreshAsync();
+        if (value == AppsPage)
+            Apps.Reload();
     }
 
     // --- Server ---------------------------------------------------------------
@@ -89,6 +101,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             _server = server;
             server.Registry.Changed += OnServerChanged;
             server.Pairing.Changed += OnServerChanged;
+            server.Inventory.Changed += OnInventoryChanged;
             ServerStatus = $"Bereit – wartet auf PCs (Port {server.Port})";
             ServerDetails = $"Name im Netzwerk {server.Identity.Name} · Zertifikat {CertificateFingerprint.Short(server.Identity.Fingerprint)}";
             ServerBrush = DeviceViewModel.OnlineBrush;
@@ -106,6 +119,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         }
         RefreshAddresses();
         await CheckFirewallAsync();
+        _updateTimer.Start();
+        await Task.Delay(TimeSpan.FromSeconds(10));
+        await CheckForUpdatesAsync();
     }
 
     // --- Firewall ---------------------------------------------------------------
@@ -164,6 +180,70 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             await copy(text);
     }
 
+    // --- Updates -------------------------------------------------------------------
+
+    [ObservableProperty] public partial bool AdminUpdateAvailable { get; set; }
+    [ObservableProperty] public partial string AdminUpdateText { get; set; } = "";
+    [ObservableProperty] public partial string UpdateStatus { get; set; } = "Noch nicht nach Updates gesucht.";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(InstallAdminUpdateCommand), nameof(CheckForUpdatesCommand))]
+    public partial bool UpdateBusy { get; set; }
+
+    private bool CanUseUpdates() => !UpdateBusy;
+
+    [RelayCommand(CanExecute = nameof(CanUseUpdates))]
+    private async Task CheckForUpdatesAsync()
+    {
+        UpdateBusy = true;
+        try
+        {
+            UpdateStatus = "Suche nach Updates …";
+            await _updater.CheckAsync();
+            AdminUpdateAvailable = _updater.AdminUpdate is not null;
+            AdminUpdateText = _updater.AdminUpdate is { } update
+                ? $"MorniLAN Admin v{update.Version} ist verfügbar (installiert: v{AdminUpdater.CurrentVersion})."
+                : "";
+            UpdateStatus = (_updater.AdminUpdate is { } u ? $"Update auf v{u.Version} verfügbar." : $"Das Panel ist aktuell (v{AdminUpdater.CurrentVersion}).")
+                           + $" Geprüft {DateTime.Now:HH:mm} Uhr. Betas werden mit angeboten.";
+            Refresh();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        {
+            UpdateStatus = $"GitHub nicht erreichbar ({ex.Message}). Nächster Versuch automatisch.";
+        }
+        finally
+        {
+            UpdateBusy = false;
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanUseUpdates))]
+    private async Task InstallAdminUpdateAsync()
+    {
+        if (_updater.AdminUpdate is not { } update)
+            return;
+        UpdateBusy = true;
+        try
+        {
+            AdminUpdateText = $"Lade v{update.Version} und prüfe die Prüfsumme …";
+            if (await _updater.PrepareAndLaunchAsync(update))
+            {
+                AdminUpdateText = "Update wird installiert, das Panel startet gleich neu …";
+                RequestExit?.Invoke();
+            }
+        }
+        catch (Exception ex)
+        {
+            AdminUpdateText = $"Update fehlgeschlagen: {ex.Message}";
+            Log.Warning(ex, "Admin-Update fehlgeschlagen");
+        }
+        finally
+        {
+            UpdateBusy = false;
+        }
+    }
+
     // --- Einstellungen ------------------------------------------------------------
 
     [ObservableProperty] public partial bool StartWithWindows { get; set; }
@@ -197,6 +277,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnServerChanged() => Dispatcher.UIThread.Post(Refresh);
 
+    private void OnInventoryChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.Reload(deviceId));
+
     private void Refresh()
     {
         if (_server is not { } server)
@@ -205,13 +287,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         var now = DateTimeOffset.UtcNow;
         var devices = server.Registry.Snapshot();
         Sync(Devices, devices, d => d.Device.DeviceId, vm => vm.DeviceId,
-            d => new DeviceViewModel(d.Device.DeviceId, server.UnpairAsync), (vm, d) => vm.Update(d, now));
+            d => new DeviceViewModel(d.Device.DeviceId, server.UnpairAsync, server.RequestDeviceUpdateAsync),
+            (vm, d) => vm.Update(d, now, _updater.DeviceUpdateFor(d.Info?.AgentVersion)));
 
         var pending = server.Pairing.Snapshot();
         Sync(PendingPairings, pending, p => p.RequestId, vm => vm.RequestId,
             p => new PendingPairingViewModel(p, server.Pairing), (vm, p) => vm.Update(p));
 
         HasNoDevices = Devices.Count == 0;
+        Apps.SyncDevices();
     }
 
     /// <summary>Liste abgleichen statt neu aufbauen, damit Eingaben (Code-Feld) erhalten bleiben.</summary>
@@ -239,10 +323,12 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         _presenceTimer.Stop();
+        _updateTimer.Stop();
         if (_server is { } server)
         {
             server.Registry.Changed -= OnServerChanged;
             server.Pairing.Changed -= OnServerChanged;
+            server.Inventory.Changed -= OnInventoryChanged;
             await server.DisposeAsync();
         }
     }

@@ -58,6 +58,8 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 
 [Run]
 Filename: "{app}\MorniLAN.Admin.exe"; Description: "MorniLAN Admin starten"; Flags: postinstall nowait skipifsilent
+; Nach einem stillen Update (aus dem Panel heraus) startet das Panel von selbst wieder
+Filename: "{app}\MorniLAN.Admin.exe"; Flags: nowait; Check: WizardSilent
 
 [UninstallRun]
 Filename: "{sys}\taskkill.exe"; Parameters: "/IM MorniLAN.Admin.exe /F"; Flags: runhidden; RunOnceId: "StopAdmin"

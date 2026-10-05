@@ -81,6 +81,18 @@
             </Grid>
           </Border>
 
+          <!-- Update für das Panel selbst -->
+          <Border Classes="card pending" IsVisible="{Binding AdminUpdateAvailable}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="4">
+                <TextBlock Text="Update verfügbar" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="{Binding AdminUpdateText}" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <Button Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center" Classes="accent"
+                      Content="Jetzt aktualisieren" Command="{Binding InstallAdminUpdateCommand}" />
+            </Grid>
+          </Border>
+
           <!-- Firewall fehlt: Hinweis mit Knopf -->
           <Border Classes="card warning" IsVisible="{Binding FirewallMissing}">
             <Grid ColumnDefinitions="*,Auto">
@@ -134,7 +146,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DeviceViewModel">
                 <Border Classes="card">
-                  <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                  <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
                     <Ellipse Width="12" Height="12" Margin="0,8,14,0" VerticalAlignment="Top"
                              Fill="{Binding StatusBrush}" />
                     <StackPanel Grid.Column="1" Spacing="2">
@@ -144,6 +156,15 @@
                     </StackPanel>
                     <Button Grid.Column="2" VerticalAlignment="Top" Content="{Binding UnpairText}"
                             Command="{Binding UnpairCommand}" />
+
+                    <!-- Update des PCs -->
+                    <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,12,0,0"
+                          IsVisible="{Binding HasUpdateText}">
+                      <TextBlock Text="{Binding UpdateText}" Foreground="{Binding UpdateBrush}" TextWrapping="Wrap"
+                                 VerticalAlignment="Center" />
+                      <Button Grid.Column="1" Margin="12,0,0,0" Classes="accent" Content="Jetzt aktualisieren"
+                              IsVisible="{Binding CanUpdate}" Command="{Binding InstallUpdateCommand}" />
+                    </Grid>
 
                     <UniformGrid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Columns="3" Margin="0,14,0,0">
                       <StackPanel Spacing="2">
@@ -197,6 +218,96 @@
               </ItemsControl>
             </StackPanel>
           </Border>
+        </StackPanel>
+
+        <!-- Freigaben: was auf dem PC installiert ist (Schalter folgen in M4) -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsApps}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Freigaben" FontSize="28" FontWeight="SemiBold" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+              <TextBlock Text="{Binding Apps.RefreshMessage}" Classes="muted" VerticalAlignment="Center" />
+              <ComboBox ItemsSource="{Binding Apps.Devices}" SelectedItem="{Binding Apps.SelectedDevice}" MinWidth="160"
+                        PlaceholderText="PC wählen" />
+              <Button Content="Neu einlesen" Command="{Binding Apps.RefreshCommand}" />
+            </StackPanel>
+          </Grid>
+          <TextBlock Classes="muted" TextWrapping="Wrap"
+                     Text="Alles, was auf dem PC installiert ist. Freigeben per Schalter kommt im nächsten Schritt (Meilenstein 4)." />
+
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBox Text="{Binding Apps.SearchText}" PlaceholderText="Suchen nach Name oder Hersteller …" />
+            <ComboBox Grid.Column="1" Margin="10,0,0,0" SelectedIndex="{Binding Apps.FilterIndex}" MinWidth="150">
+              <ComboBoxItem Content="Alle" />
+              <ComboBoxItem Content="Spiele" />
+              <ComboBoxItem Content="Programme" />
+              <ComboBoxItem Content="Store-Apps" />
+            </ComboBox>
+            <ToggleSwitch Grid.Column="2" Margin="16,0,0,0" IsChecked="{Binding Apps.ShowSystem}"
+                          OnContent="Systemkomponenten anzeigen" OffContent="Systemkomponenten anzeigen" />
+          </Grid>
+          <TextBlock Text="{Binding Apps.Summary}" Classes="muted" FontSize="12" />
+
+          <TextBlock IsVisible="{Binding Apps.IsEmpty}" Text="{Binding Apps.EmptyText}" Classes="muted" TextWrapping="Wrap" />
+
+          <!-- Spiele als Cover-Kacheln -->
+          <StackPanel Spacing="10" IsVisible="{Binding Apps.HasGames}">
+            <TextBlock Text="Spiele" Classes="h2" />
+            <ItemsControl ItemsSource="{Binding Apps.Games}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:AppItemViewModel">
+                  <Border Width="150" Margin="0,0,14,14" CornerRadius="8" Background="#1A1E26" ClipToBounds="True"
+                          ToolTip.Tip="{Binding Details}">
+                    <StackPanel>
+                      <Panel Height="225" Background="#15181E">
+                        <Image Source="{Binding Cover}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
+                        <TextBlock Text="{Binding Name}" IsVisible="{Binding !HasCover}" TextWrapping="Wrap" Margin="12"
+                                   VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center" />
+                      </Panel>
+                      <StackPanel Margin="10,8" Spacing="2">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Details}" Classes="label" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+
+          <!-- Programme und Store-Apps als Liste -->
+          <StackPanel Spacing="10" IsVisible="{Binding Apps.HasApps}">
+            <TextBlock Text="Programme und Apps" Classes="h2" />
+            <Border Classes="card" Padding="8">
+              <ItemsControl ItemsSource="{Binding Apps.Apps}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AppItemViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,6" Opacity="{Binding Opacity}">
+                      <Panel Width="36" Height="36" Margin="0,0,14,0" VerticalAlignment="Center">
+                        <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="32" Height="32" />
+                        <Border IsVisible="{Binding !HasIcon}" CornerRadius="8" Background="#262B35">
+                          <TextBlock Text="{Binding Initial}" FontWeight="Bold" HorizontalAlignment="Center"
+                                     VerticalAlignment="Center" Foreground="#9AA3B2" />
+                        </Border>
+                      </Panel>
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding Details}" Classes="label" TextTrimming="CharacterEllipsis" />
+                      </StackPanel>
+                      <Border Grid.Column="2" Margin="12,0,0,0" CornerRadius="10" Padding="8,2" VerticalAlignment="Center"
+                              Background="{Binding BadgeBrush}">
+                        <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="White" />
+                      </Border>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Border>
+          </StackPanel>
         </StackPanel>
 
         <!-- Diagnose -->
@@ -264,6 +375,20 @@
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
                          Text="Das X schließt dann nur das Fenster. Ganz beenden über das MorniLAN-Symbol unten rechts → Beenden." />
               <TextBlock Text="{Binding SettingsMessage}" Foreground="#3DDC84" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Updates" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Das Panel sucht beim Start und alle 6 Stunden auf GitHub nach neuen Versionen, Betas eingeschlossen. Die verwalteten PCs aktualisieren sich selbst, aber nie während eines Spiels; über die Karte des PCs geht es auch sofort." />
+              <TextBlock Text="{Binding Version}" />
+              <TextBlock Text="{Binding UpdateStatus}" Classes="muted" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Nach Updates suchen" Command="{Binding CheckForUpdatesCommand}" />
+                <Button Content="Jetzt aktualisieren" Classes="accent" IsVisible="{Binding AdminUpdateAvailable}"
+                        Command="{Binding InstallAdminUpdateCommand}" />
+              </StackPanel>
             </StackPanel>
           </Border>
         </StackPanel>

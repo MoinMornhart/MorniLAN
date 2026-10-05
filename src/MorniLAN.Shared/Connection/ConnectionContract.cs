@@ -19,6 +19,15 @@ public static class ConnectionDefaults
 
     /// <summary>Fehlversuche bei der Code-Eingabe, danach wird die Pairing-Anfrage verworfen.</summary>
     public const int MaxPairingAttempts = 5;
+
+    /// <summary>So oft liest der Agent die Programmliste neu ein (geschickt wird nur bei Änderungen).</summary>
+    public static readonly TimeSpan InventoryInterval = TimeSpan.FromMinutes(15);
+
+    /// <summary>Größte erlaubte SignalR-Nachricht (Programmliste, einzelnes Bild).</summary>
+    public const long MaxMessageBytes = 2 * 1024 * 1024;
+
+    /// <summary>Größtes erlaubtes Bild (Cover sind auf 300×450 verkleinert, das reicht großzügig).</summary>
+    public const int MaxImageBytes = 512 * 1024;
 }
 
 /// <summary>Methoden, die der Agent im Admin-Panel aufruft (SignalR-Hub).</summary>
@@ -35,6 +44,15 @@ public interface IAdminHub
 
     /// <summary>Regelmäßige Statusmeldung.</summary>
     Task Heartbeat(DeviceStatus status);
+
+    /// <summary>Alle gefundenen Programme und Spiele. Antwort: Hashes der Bilder, die dem Panel noch fehlen.</summary>
+    Task<string[]> ReportInventory(InventoryReport report);
+
+    /// <summary>Ein Bild nachliefern, das das Panel angefordert hat.</summary>
+    Task UploadImage(AppImage image);
+
+    /// <summary>Stand des automatischen Updates (prüft, lädt, wartet auf Spielende, …).</summary>
+    Task ReportUpdateState(Updates.AgentUpdateState state);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -48,6 +66,12 @@ public interface IAgentClient
 
     /// <summary>Der Admin hat den PC entfernt.</summary>
     Task OnUnpaired();
+
+    /// <summary>Der Admin möchte die Programmliste jetzt neu einlesen lassen.</summary>
+    Task OnRefreshInventory();
+
+    /// <summary>Der Admin möchte das Update jetzt (statt erst beim nächsten Prüfen).</summary>
+    Task OnInstallUpdate();
 }
 
 public enum HelloStatus

@@ -136,5 +136,9 @@ public sealed class PairingCoordinatorTests : IDisposable
         }
 
         public Task OnUnpaired() => Task.CompletedTask;
+
+        public Task OnRefreshInventory() => Task.CompletedTask;
+
+        public Task OnInstallUpdate() => Task.CompletedTask;
     }
 }

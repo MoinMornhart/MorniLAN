@@ -13,6 +13,7 @@ internal sealed class AgentHub(
     DeviceRegistry registry,
     PairingCoordinator pairing,
     AdminIdentity identity,
+    InventoryStore inventory,
     TimeProvider time,
     ILogger<AgentHub> logger) : Hub<IAgentClient>, IAdminHub
 {
@@ -79,12 +80,43 @@ internal sealed class AgentHub(
 
     public Task Heartbeat(DeviceStatus status)
     {
-        if (!Context.Items.TryGetValue(DeviceKey, out var id) || id is not Guid deviceId
-            || !registry.IsPaired(deviceId, Fingerprint))
-            throw new HubException("Nicht gekoppelt.");
+        var deviceId = RequirePairedDevice();
         registry.MarkHeartbeat(deviceId, Context.ConnectionId, status with { DeviceId = deviceId }, time.GetUtcNow());
         return Task.CompletedTask;
     }
+
+    public Task<string[]> ReportInventory(InventoryReport report)
+    {
+        var deviceId = RequirePairedDevice();
+        if (report.Apps.Length > 5000)
+            throw new HubException("Programmliste zu groß.");
+        inventory.Save(deviceId, report);
+        var missing = inventory.MissingImages(report);
+        logger.LogInformation("Programmliste von {DeviceId}: {Count} Einträge, {Missing} Bilder angefordert", deviceId,
+            report.Apps.Length, missing.Length);
+        return Task.FromResult(missing);
+    }
+
+    public Task UploadImage(AppImage image)
+    {
+        RequirePairedDevice();
+        if (!inventory.TrySaveImage(image))
+            logger.LogWarning("Bild {Hash} abgelehnt (Hash, Größe oder Typ passt nicht)", image.Hash);
+        return Task.CompletedTask;
+    }
+
+    public Task ReportUpdateState(MorniLAN.Shared.Updates.AgentUpdateState state)
+    {
+        var deviceId = RequirePairedDevice();
+        var message = state.Message.Length <= 300 ? state.Message : state.Message[..300];
+        registry.MarkUpdateState(deviceId, Context.ConnectionId, state with { Message = message });
+        return Task.CompletedTask;
+    }
+
+    private Guid RequirePairedDevice() =>
+        Context.Items.TryGetValue(DeviceKey, out var id) && id is Guid deviceId && registry.IsPaired(deviceId, Fingerprint)
+            ? deviceId
+            : throw new HubException("Nicht gekoppelt.");
 
     /// <summary>Nach dem Pairing meldet sich der Agent erneut mit Hello, damit ist er online.</summary>
     private HelloResponse Accept(DeviceInfo device)
