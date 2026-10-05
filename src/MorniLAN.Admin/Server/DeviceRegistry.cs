@@ -69,6 +69,13 @@ public sealed class DeviceRegistry
                 .FirstOrDefault(d => CertificateFingerprint.AreEqual(d.Fingerprint, fingerprint));
     }
 
+    /// <summary>Aktuelle Verbindung eines PCs, null wenn er nicht verbunden ist.</summary>
+    public string? ConnectionIdOf(Guid deviceId)
+    {
+        lock (_lock)
+            return _devices.TryGetValue(deviceId, out var e) ? e.ConnectionId : null;
+    }
+
     public bool IsPaired(Guid deviceId, string fingerprint)
     {
         lock (_lock)

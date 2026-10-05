@@ -3,6 +3,7 @@ using System.Threading.Channels;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
+using MorniLAN.Agent.Inventory;
 using MorniLAN.Agent.Platform;
 using MorniLAN.Shared;
 using MorniLAN.Shared.Connection;
@@ -22,7 +23,8 @@ internal sealed class AdminConnectionService(
     AgentIdentity identity,
     SystemStatusCollector statusCollector,
     ILogger<AdminConnectionService> logger,
-    DiscoveryListener? discovery = null) : BackgroundService
+    DiscoveryListener? discovery = null,
+    InventoryService? inventory = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -117,6 +119,12 @@ internal sealed class AdminConnectionService(
         connection.On<PairingApproval>(nameof(IAgentClient.OnPairingApproved), a => events.Writer.TryWrite(new Approved(a)));
         connection.On<string>(nameof(IAgentClient.OnPairingRejected), r => events.Writer.TryWrite(new Rejected(r)));
         connection.On(nameof(IAgentClient.OnUnpaired), () => events.Writer.TryWrite(new Unpaired()));
+        var refreshRequested = new SemaphoreSlim(0, 1);
+        connection.On(nameof(IAgentClient.OnRefreshInventory), () =>
+        {
+            if (refreshRequested.CurrentCount == 0)
+                refreshRequested.Release();
+        });
 
         try
         {
@@ -160,13 +168,73 @@ internal sealed class AdminConnectionService(
             });
             SetState(AgentLinkState.Online);
             logger.LogInformation("Online bei Admin-Panel {Name}", hello.AdminName);
-            await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
+
+            using var session = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            var inventorySync = inventory is null
+                ? Task.CompletedTask
+                : SyncInventoryAsync(connection, inventory, refreshRequested, session.Token);
+            try
+            {
+                await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
+            }
+            finally
+            {
+                await session.CancelAsync();
+                await inventorySync.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            }
         }
         catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
         {
             logger.LogWarning("Verbindung zu {Host} beendet: {Error}", endpoint.Host, ex.Message);
         }
         return SessionOutcome.Ended;
+    }
+
+    /// <summary>
+    /// Schickt die Programmliste nach dem Verbinden, danach alle 15 Minuten oder auf Wunsch des Admins,
+    /// aber nur, wenn sich etwas geändert hat. Bilder gehen nur einmal raus: das Panel sagt, welche ihm fehlen.
+    /// Fehler hier beenden nie die Verbindung, die Heartbeats laufen weiter.
+    /// </summary>
+    private async Task SyncInventoryAsync(HubConnection connection, InventoryService service, SemaphoreSlim refreshRequested,
+        CancellationToken cancellationToken)
+    {
+        string? sentHash = null;
+        var force = false;
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var report = force
+                    ? await service.RefreshAsync(cancellationToken)
+                    : await service.GetAsync(ConnectionDefaults.InventoryInterval, cancellationToken);
+                if (force || report.ContentHash != sentHash)
+                {
+                    var missing = await connection.InvokeAsync<string[]>(nameof(IAdminHub.ReportInventory), report, cancellationToken);
+                    var uploaded = 0;
+                    foreach (var hash in missing)
+                    {
+                        if (service.GetImage(hash) is not { } image)
+                            continue;
+                        await connection.InvokeAsync(nameof(IAdminHub.UploadImage), image, cancellationToken);
+                        uploaded++;
+                    }
+                    sentHash = report.ContentHash;
+                    logger.LogInformation("Programmliste an das Panel geschickt ({Count} Einträge, {Images} Bilder)",
+                        report.Apps.Length, uploaded);
+                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning("Programmliste konnte nicht übertragen werden: {Error}", ex.Message);
+            }
+
+            force = await refreshRequested.WaitAsync(ConnectionDefaults.InventoryInterval, cancellationToken)
+                .ConfigureAwait(false);
+        }
     }
 
     private async Task<bool> PairAsync(HubConnection connection, AdminEndpoint endpoint, string adminFingerprint,

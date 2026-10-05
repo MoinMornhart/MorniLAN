@@ -55,11 +55,13 @@ public sealed class AdminServer : IAsyncDisposable
         Identity = new AdminIdentity(certificate, options.Name);
         Registry = new DeviceRegistry(options.DataDirectory);
         Pairing = new PairingCoordinator(Registry, Identity, options.Time);
+        Inventory = new InventoryStore(options.DataDirectory);
     }
 
     public AdminIdentity Identity { get; }
     public DeviceRegistry Registry { get; }
     public PairingCoordinator Pairing { get; }
+    public InventoryStore Inventory { get; }
 
     /// <summary>Tatsächlicher Port nach dem Start.</summary>
     public int Port { get; private set; }
@@ -86,12 +88,13 @@ public sealed class AdminServer : IAsyncDisposable
         builder.Services.AddSingleton(Identity);
         builder.Services.AddSingleton(Registry);
         builder.Services.AddSingleton(Pairing);
+        builder.Services.AddSingleton(Inventory);
         builder.Services.AddSingleton(_options.Time);
         builder.Services.AddSignalR(o =>
             {
                 o.KeepAliveInterval = ConnectionDefaults.HeartbeatInterval;
                 o.ClientTimeoutInterval = ConnectionDefaults.OfflineAfter;
-                o.MaximumReceiveMessageSize = 256 * 1024;
+                o.MaximumReceiveMessageSize = ConnectionDefaults.MaxMessageBytes;
                 o.EnableDetailedErrors = false;
             })
             .AddJsonProtocol(o => SignalRJson.Configure(o.PayloadSerializerOptions));
@@ -128,6 +131,16 @@ public sealed class AdminServer : IAsyncDisposable
             return;
         var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
         await hub.Clients.Client(connectionId).OnUnpaired();
+    }
+
+    /// <summary>Den Agent bitten, seine Programmliste sofort neu einzulesen und zu schicken.</summary>
+    public async Task<bool> RequestInventoryRefreshAsync(Guid deviceId)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnRefreshInventory();
+        return true;
     }
 
     public async ValueTask DisposeAsync()

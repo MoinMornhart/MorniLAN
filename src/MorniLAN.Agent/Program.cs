@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Options;
 using MorniLAN.Agent;
 using MorniLAN.Agent.Connection;
+using MorniLAN.Agent.Inventory;
 using MorniLAN.Agent.Platform;
 using MorniLAN.Shared;
 using Serilog;
@@ -56,6 +57,7 @@ builder.Services.AddSingleton(sp => AgentIdentity.LoadOrCreate(
     sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory,
     sp.GetRequiredService<ILogger<AgentIdentity>>()));
 builder.Services.AddSingleton<SystemStatusCollector>();
+builder.Services.AddSingleton<InventoryService>();
 builder.Services.AddSingleton<DiscoveryListener>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscoveryListener>());
 
