@@ -1,6 +1,7 @@
 using MorniLAN.Shared.Connection;
 using MorniLAN.Shared.Models;
 using MorniLAN.Shared.Security;
+using Serilog;
 
 namespace MorniLAN.Admin.Server;
 
@@ -105,8 +106,13 @@ public sealed class PairingCoordinator(DeviceRegistry registry, AdminIdentity id
                     _pending.Remove(pending);
             }
             Changed?.Invoke();
+            Log.Warning("Falscher Pairing-Code für {Machine} ({Remote}), Versuch {Attempt} von {Max}",
+                pending.Request.Device.MachineName, pending.RemoteAddress, pending.FailedAttempts,
+                ConnectionDefaults.MaxPairingAttempts);
             if (!exhausted)
                 return PairingSubmitResult.WrongCode;
+            Log.Warning("Pairing-Anfrage von {Machine} nach zu vielen falschen Codes verworfen",
+                pending.Request.Device.MachineName);
             await SendAsync(pending.ConnectionId, c => c.OnPairingRejected("Zu viele falsche Codes."));
             return PairingSubmitResult.TooManyAttempts;
         }
@@ -114,6 +120,8 @@ public sealed class PairingCoordinator(DeviceRegistry registry, AdminIdentity id
         lock (_lock)
             pending.Approved = true;
         Changed?.Invoke();
+        Log.Information("Pairing-Code für {Machine} ({Remote}) richtig, warte auf Bestätigung des Agents",
+            pending.Request.Device.MachineName, pending.RemoteAddress);
         var proof = Convert.ToBase64String(PairingProof.Sign(key, PairingRole.Admin, transcript));
         await SendAsync(pending.ConnectionId, c => c.OnPairingApproved(new PairingApproval(proof)));
         return PairingSubmitResult.Approved;
@@ -131,6 +139,7 @@ public sealed class PairingCoordinator(DeviceRegistry registry, AdminIdentity id
         if (pending is null)
             return;
         Changed?.Invoke();
+        Log.Information("Pairing-Anfrage von {Machine} vom Admin abgelehnt", pending.Request.Device.MachineName);
         await SendAsync(pending.ConnectionId, c => c.OnPairingRejected("Vom Admin abgelehnt."));
     }
 
