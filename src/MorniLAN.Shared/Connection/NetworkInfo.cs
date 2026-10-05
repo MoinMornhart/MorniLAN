@@ -7,9 +7,25 @@ namespace MorniLAN.Shared.Connection;
 /// <summary>Eigene IPv4-Adressen und Broadcast-Ziele des Admin-PCs.</summary>
 public static class NetworkInfo
 {
-    public readonly record struct LocalAddress(IPAddress Address, IPAddress? Broadcast, bool IsTailscale);
+    /// <param name="IsVirtual">Adapter von Hyper-V, VirtualBox, VMware oder einem VPN: für andere PCs meist unerreichbar.</param>
+    public readonly record struct LocalAddress(IPAddress Address, IPAddress? Broadcast, bool IsTailscale, bool IsVirtual = false)
+    {
+        public string Kind => IsTailscale ? "Tailscale" : IsVirtual ? "Virtuell" : "Heimnetz";
+    }
 
-    public static IReadOnlyList<LocalAddress> LocalIPv4()
+    private static readonly string[] VirtualMarkers =
+        ["Hyper-V", "VirtualBox", "VMware", "Virtual Ethernet", "vEthernet", "ZeroTier", "Radmin", "Hamachi", "TAP-Windows",
+         "WireGuard", "OpenVPN", "Npcap"];
+
+    internal static bool LooksVirtual(string name, string description) =>
+        VirtualMarkers.Any(m => name.Contains(m, StringComparison.OrdinalIgnoreCase)
+                                || description.Contains(m, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>Eigene IPv4-Adressen, sortiert: Heimnetz, Tailscale, virtuelle Adapter.</summary>
+    public static IReadOnlyList<LocalAddress> LocalIPv4() =>
+        [.. Collect().OrderBy(a => a.IsTailscale ? 1 : a.IsVirtual ? 2 : 0)];
+
+    private static List<LocalAddress> Collect()
     {
         var result = new List<LocalAddress>();
         NetworkInterface[] interfaces;
@@ -26,26 +42,19 @@ public static class NetworkInfo
                 if (ip.AddressFamily != AddressFamily.InterNetwork || IsLinkLocal(ip))
                     continue;
                 var tailscale = IsTailscale(ip);
-                result.Add(new LocalAddress(ip, tailscale ? null : BroadcastOf(ip, unicast.PrefixLength), tailscale));
+                result.Add(new LocalAddress(ip, tailscale ? null : BroadcastOf(ip, unicast.PrefixLength), tailscale,
+                    !tailscale && LooksVirtual(nic.Name, nic.Description)));
             }
         }
         return result;
     }
 
     /// <summary>
-    /// Adressen für den Agent, in dieser Reihenfolge: LAN, Tailscale, Rechnername.
+    /// Adressen für den Agent, in dieser Reihenfolge: Heimnetz, Tailscale, virtuelle Adapter, Rechnername.
     /// Über die Tailscale-IP findet der Agent das Panel auch, wenn er nicht mehr im selben LAN steht.
     /// </summary>
-    public static string[] AdminEndpoints()
-    {
-        var addresses = LocalIPv4();
-        return
-        [
-            .. addresses.Where(a => !a.IsTailscale).Select(a => a.Address.ToString()),
-            .. addresses.Where(a => a.IsTailscale).Select(a => a.Address.ToString()),
-            Environment.MachineName,
-        ];
-    }
+    public static string[] AdminEndpoints() =>
+        [.. LocalIPv4().Select(a => a.Address.ToString()), Environment.MachineName];
 
     /// <summary>Tailscale vergibt Adressen aus 100.64.0.0/10 (CGNAT-Bereich).</summary>
     public static bool IsTailscale(IPAddress ip)

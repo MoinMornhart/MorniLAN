@@ -5,7 +5,7 @@
 
 MorniLAN verwaltet einen Windows-PC, den ein Freund benutzt. Der Freund hat ein eigenes Standardkonto und sieht statt des Desktops einen **Launcher** mit genau den Apps und Spielen, die der Admin freigegeben hat. Der Admin steuert alles bequem vom eigenen PC aus: Freigaben, Status, Fernzugriff und Updates. Das funktioniert im selben LAN oder über **Tailscale**, ohne Portfreigaben.
 
-> **Status:** frühe Entwicklung (Meilenstein 2 – Verbindung Agent ↔ Admin, siehe [docs/verbindung.md](docs/verbindung.md)). Screenshots folgen, sobald Launcher und Admin-Panel mehr Inhalte zeigen.
+> **Status:** frühe Entwicklung (Meilenstein 2.5 – Einrichtung ohne Konsole). Verbindung: [docs/verbindung.md](docs/verbindung.md), Einrichtung: [docs/einrichtung.md](docs/einrichtung.md). Screenshots folgen, sobald Launcher und Admin-Panel mehr Inhalte zeigen.
 
 ## Komponenten
 
@@ -38,6 +38,21 @@ MorniLAN verwaltet einen Windows-PC, den ein Freund benutzt. Der Freund hat ein 
 | Sperren | App Control (WDAC) bzw. AppLocker je nach Edition, dazu immer ein Prozess-Wächter | Home und Pro werden unterstützt, die Edition wird zur Laufzeit erkannt |
 | Auto-Update | Velopack über GitHub Releases | Delta-Updates, Rollback, öffentliches Repo und damit kein Token nötig |
 
+## Installieren
+
+Die fertigen Setups liegen unter **[Releases](https://github.com/MoinMornhart/MorniLAN/releases)**:
+
+| Für | Datei | Rechte |
+|---|---|---|
+| deinen PC (Admin) | `MorniLAN-Admin-Setup-<Version>.exe` | keine Admin-Rechte nötig |
+| den verwalteten PC | `MorniLAN-Geraete-Setup-<Version>.exe` | einmal Admin-Rechte (Dienst + Firewall) |
+
+1. **Admin-PC:** Admin-Setup ausführen, Panel öffnen, einmal **„Firewall einrichten“** klicken.
+2. **Verwalteter PC:** Geräte-Setup ausführen. Danach zeigt das MorniLAN-Fenster einen **Pairing-Code**.
+3. Den Code im Admin-Panel eingeben. Fertig.
+
+Findet der PC das Panel nicht von selbst (z. B. über Tailscale), trägt man im Geräte-Setup bei „Adresse des Admin-PCs“ eine der Adressen ein, die das Panel unter „Neuen PC hinzufügen“ anzeigt. Details: [docs/einrichtung.md](docs/einrichtung.md).
+
 ## Bauen
 
 Voraussetzung: [.NET 10 SDK](https://dotnet.microsoft.com/download) (`winget install Microsoft.DotNet.SDK.10`).
@@ -47,7 +62,10 @@ Neuen Entwicklungsrechner einrichten: `./tools/setup-dev.ps1`. Es installiert da
 ./build.ps1                 # Build (Release)
 ./build.ps1 -Task Test      # Build + Tests
 ./build.ps1 -Task Publish   # self-contained win-x64
+./build.ps1 -Task Installer # beide Setups (braucht Inno Setup 6: winget install JRSoftware.InnoSetup)
 ```
+
+Ein Tag `v<Version>` (passend zu `VersionPrefix`, z. B. `v0.2.0` oder `v0.2.0-beta.1`) baut auf GitHub automatisch beide Setups und veröffentlicht sie als Release.
 
 Hinweis: Lokal landen Build-Ausgaben unter `%LOCALAPPDATA%\MorniLAN\artifacts` bzw. `…\publish` und **nicht** im Projektordner, da dieser in iCloud Drive liegt. Auf CI landet alles unter `./artifacts`.
 
@@ -64,12 +82,13 @@ dotnet run --project src/MorniLAN.Agent      # als Konsolen-App; Logs in %Progra
 - SemVer, die Version steht **nur** in [`Directory.Build.props`](Directory.Build.props) (`VersionPrefix`).
 - `main` = stabil, `dev` = Entwicklung, `feature/*` = ein Branch pro Meilenstein.
 - Commits nach [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:` …).
-- Tags `v*` erzeugen ab Meilenstein 9 automatisch Releases.
+- Tags `v*` erzeugen automatisch ein GitHub Release mit beiden Setups (Auto-Update folgt in Meilenstein 9).
 
 ## Fahrplan
 
 - [x] 1. Grundgerüst: Projektmappe, Shared-Modelle, README, Git, Build-Skript, CI
-- [ ] 2. Verbindung Agent ↔ Admin mit Pairing und Heartbeat (LAN, dann Tailscale)
+- [x] 2. Verbindung Agent ↔ Admin mit Pairing und Heartbeat (LAN, dann Tailscale)
+- [x] 2.5 Einrichtung ohne Konsole: Setups, Windows-Dienst, Firewall per Knopf, Diagnose
 - [ ] 3. Programme und Steam-Spiele erkennen
 - [ ] 4. Freigaben
 - [ ] 5. Launcher als Shell

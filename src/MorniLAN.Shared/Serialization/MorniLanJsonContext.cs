@@ -26,4 +26,5 @@ namespace MorniLAN.Shared.Serialization;
 [JsonSerializable(typeof(PairingRequest))]
 [JsonSerializable(typeof(PairingApproval))]
 [JsonSerializable(typeof(DiscoveryBeacon))]
+[JsonSerializable(typeof(AgentLocalStatus))]
 public sealed partial class MorniLanJsonContext : JsonSerializerContext;

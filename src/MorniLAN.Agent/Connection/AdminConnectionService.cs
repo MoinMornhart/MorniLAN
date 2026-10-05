@@ -11,18 +11,6 @@ using MorniLAN.Shared.Security;
 
 namespace MorniLAN.Agent.Connection;
 
-public enum AgentLinkState
-{
-    /// <summary>Kein Admin-Panel bekannt oder erreichbar.</summary>
-    Searching,
-
-    /// <summary>Verbunden, wartet darauf, dass der Admin den Pairing-Code eingibt.</summary>
-    WaitingForPairing,
-
-    /// <summary>Gekoppelt und online, Heartbeats laufen.</summary>
-    Online,
-}
-
 /// <summary>
 /// Hält die Verbindung zum Admin-Panel: Panel finden, per TLS verbinden (eigenes Client-Zertifikat,
 /// Panel-Zertifikat gepinnt), bei Bedarf koppeln, danach Heartbeats senden. Bricht die Verbindung ab,
@@ -45,11 +33,22 @@ internal sealed class AdminConnectionService(
     private readonly DeviceInfo _deviceInfo = new(store.Current.DeviceId, Environment.MachineName,
         WindowsEditionDetector.Detect(), VersionInfo.Version);
     private string? _pairingCode;
+    private string? _adminName;
 
     public AgentLinkState State { get; private set; } = AgentLinkState.Searching;
 
-    /// <summary>Aktueller Code in Normalform, solange nicht gekoppelt (für Tests und später den Launcher).</summary>
+    /// <summary>Aktueller Code in Normalform, solange nicht gekoppelt (für Tests und den Launcher).</summary>
     public string? PairingCode => Volatile.Read(ref _pairingCode);
+
+    /// <summary>Name des Panels, mit dem der Agent gerade spricht (oder zuletzt gekoppelt war).</summary>
+    public string? AdminName => Volatile.Read(ref _adminName) ?? store.Current.Admin?.Name;
+
+    /// <summary>Momentaufnahme für den lokalen Statuskanal.</summary>
+    public AgentLocalStatus LocalStatus() =>
+        new(State, State == AgentLinkState.WaitingForPairing && PairingCode is { } code
+                ? Shared.Connection.PairingCode.Format(code)
+                : null,
+            AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow);
 
     public event Action<AgentLinkState>? StateChanged;
 
@@ -137,6 +136,7 @@ internal sealed class AdminConnectionService(
             logger.LogInformation("Verbunden mit {Host}:{Port} ({Source})", endpoint.Host, endpoint.Port, endpoint.Source);
             var hello = await connection.InvokeAsync<HelloResponse>(nameof(IAdminHub.Hello),
                 new HelloRequest(_deviceInfo), stoppingToken);
+            Volatile.Write(ref _adminName, hello.AdminName);
 
             if (hello.Status == HelloStatus.PairingRequired)
             {

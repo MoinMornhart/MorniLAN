@@ -5,7 +5,7 @@
     Nur hier ändern. CI kann ein Suffix setzen: -p:VersionSuffix=beta.1
   -->
   <PropertyGroup>
-    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionPrefix>0.2.0</VersionPrefix>
     <Product>MorniLAN</Product>
     <Company>MoinMornhart</Company>
     <Authors>MoinMornhart</Authors>
