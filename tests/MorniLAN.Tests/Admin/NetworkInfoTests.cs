@@ -1,5 +1,5 @@
 using System.Net;
-using MorniLAN.Admin.Server;
+using MorniLAN.Shared.Connection;
 
 namespace MorniLAN.Tests.Admin;
 

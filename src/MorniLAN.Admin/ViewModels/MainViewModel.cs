@@ -4,6 +4,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using MorniLAN.Admin.Server;
 using MorniLAN.Shared;
+using MorniLAN.Shared.Connection;
 using MorniLAN.Shared.Security;
 using Serilog;
 

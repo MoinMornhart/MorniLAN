@@ -6,6 +6,21 @@ using MorniLAN.Shared;
 using Serilog;
 using Serilog.Events;
 
+// Nur ein Agent pro PC: zwei Instanzen teilen sich Zertifikat und Pin und stören sich beim Pairing.
+using var singleInstance = new Mutex(initiallyOwned: false, @"Global\MorniLAN.Agent");
+try
+{
+    if (!singleInstance.WaitOne(TimeSpan.Zero))
+    {
+        Console.Error.WriteLine("MorniLAN Agent läuft auf diesem PC bereits. Dieses Fenster kann geschlossen werden.");
+        return 1;
+    }
+}
+catch (AbandonedMutexException)
+{
+    // Vorige Instanz ist abgestürzt, der Mutex gehört jetzt uns.
+}
+
 Directory.CreateDirectory(AgentPaths.Logs);
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -44,3 +59,4 @@ builder.Services.AddHostedService<AdminConnectionService>();
 
 var host = builder.Build();
 host.Run();
+return 0;
