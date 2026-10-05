@@ -35,7 +35,8 @@ public sealed class AgentAdminConnectionTests : IDisposable
         // 1. Unbekannter Agent meldet sich und wartet auf den Code.
         var agent = await StartAgentAsync(admin.Port);
         await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
-        Assert.Equal(AgentLinkState.WaitingForPairing, agent.State);
+        // Das Panel sieht die Anfrage einen Augenblick, bevor der Agent seinen Zustand umstellt.
+        await WaitUntil(() => agent.State == AgentLinkState.WaitingForPairing, "Agent wartet auf Pairing");
         var request = admin.Pairing.Snapshot()[0];
         Assert.Equal(Environment.MachineName, request.Device.MachineName);
 
@@ -63,7 +64,8 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await admin.UnpairAsync(device.Device.DeviceId);
         Assert.Empty(admin.Registry.Snapshot());
         await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "neue Pairing-Anfrage");
-        Assert.Equal(AgentLinkState.WaitingForPairing, agent.State);
+        // Das Panel sieht die Anfrage einen Augenblick, bevor der Agent seinen Zustand umstellt.
+        await WaitUntil(() => agent.State == AgentLinkState.WaitingForPairing, "Agent wartet auf Pairing");
 
         await StopAsync(agent);
     }
