@@ -133,6 +133,17 @@ public sealed class AdminServer : IAsyncDisposable
         await hub.Clients.Client(connectionId).OnUnpaired();
     }
 
+    /// <summary>Den Agent bitten, sein Update sofort zu prüfen und zu installieren (außer ein Spiel läuft).</summary>
+    public async Task<bool> RequestDeviceUpdateAsync(Guid deviceId)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnInstallUpdate();
+        Log.Information("Update für PC {DeviceId} angestoßen", deviceId);
+        return true;
+    }
+
     /// <summary>Den Agent bitten, seine Programmliste sofort neu einzulesen und zu schicken.</summary>
     public async Task<bool> RequestInventoryRefreshAsync(Guid deviceId)
     {

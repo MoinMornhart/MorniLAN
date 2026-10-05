@@ -24,7 +24,8 @@ internal sealed class AdminConnectionService(
     SystemStatusCollector statusCollector,
     ILogger<AdminConnectionService> logger,
     DiscoveryListener? discovery = null,
-    InventoryService? inventory = null) : BackgroundService
+    InventoryService? inventory = null,
+    Updates.AgentUpdateService? updates = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -125,6 +126,7 @@ internal sealed class AdminConnectionService(
             if (refreshRequested.CurrentCount == 0)
                 refreshRequested.Release();
         });
+        connection.On(nameof(IAgentClient.OnInstallUpdate), () => updates?.RequestNow());
 
         try
         {
@@ -173,12 +175,25 @@ internal sealed class AdminConnectionService(
             var inventorySync = inventory is null
                 ? Task.CompletedTask
                 : SyncInventoryAsync(connection, inventory, refreshRequested, session.Token);
+
+            // Update-Stand ans Panel: einmal jetzt, danach bei jeder Änderung
+            void ReportUpdate(Shared.Updates.AgentUpdateState state) =>
+                _ = connection.InvokeAsync(nameof(IAdminHub.ReportUpdateState), state, session.Token)
+                    .ContinueWith(t => logger.LogDebug("Update-Stand nicht gemeldet: {Error}", t.Exception?.GetBaseException().Message),
+                        TaskContinuationOptions.OnlyOnFaulted);
+            if (updates is not null)
+            {
+                updates.StateChanged += ReportUpdate;
+                ReportUpdate(updates.State);
+            }
             try
             {
                 await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
             }
             finally
             {
+                if (updates is not null)
+                    updates.StateChanged -= ReportUpdate;
                 await session.CancelAsync();
                 await inventorySync.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             }

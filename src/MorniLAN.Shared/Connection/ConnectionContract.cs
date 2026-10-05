@@ -50,6 +50,9 @@ public interface IAdminHub
 
     /// <summary>Ein Bild nachliefern, das das Panel angefordert hat.</summary>
     Task UploadImage(AppImage image);
+
+    /// <summary>Stand des automatischen Updates (prüft, lädt, wartet auf Spielende, …).</summary>
+    Task ReportUpdateState(Updates.AgentUpdateState state);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -66,6 +69,9 @@ public interface IAgentClient
 
     /// <summary>Der Admin möchte die Programmliste jetzt neu einlesen lassen.</summary>
     Task OnRefreshInventory();
+
+    /// <summary>Der Admin möchte das Update jetzt (statt erst beim nächsten Prüfen).</summary>
+    Task OnInstallUpdate();
 }
 
 public enum HelloStatus

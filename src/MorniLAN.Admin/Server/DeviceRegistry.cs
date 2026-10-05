@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using MorniLAN.Shared.Connection;
 using MorniLAN.Shared.Models;
 using MorniLAN.Shared.Security;
+using MorniLAN.Shared.Updates;
 
 namespace MorniLAN.Admin.Server;
 
@@ -16,7 +17,8 @@ public sealed record DeviceSnapshot(
     DeviceStatus? Status,
     bool Connected,
     DateTimeOffset? LastSeen,
-    string? RemoteAddress)
+    string? RemoteAddress,
+    AgentUpdateState? Update = null)
 {
     public DevicePresence PresenceAt(DateTimeOffset now) => PresenceRules.Evaluate(Connected, LastSeen, now);
 }
@@ -35,9 +37,10 @@ public sealed class DeviceRegistry
         public string? ConnectionId { get; set; }
         public DateTimeOffset? LastSeen { get; set; }
         public string? RemoteAddress { get; set; }
+        public AgentUpdateState? Update { get; set; }
 
         public DeviceSnapshot ToSnapshot() =>
-            new(Device, Info, Status, ConnectionId is not null, LastSeen, RemoteAddress);
+            new(Device, Info, Status, ConnectionId is not null, LastSeen, RemoteAddress, Update);
     }
 
     private readonly Lock _lock = new();
@@ -67,6 +70,17 @@ public sealed class DeviceRegistry
         lock (_lock)
             return _devices.Values.Select(e => e.Device)
                 .FirstOrDefault(d => CertificateFingerprint.AreEqual(d.Fingerprint, fingerprint));
+    }
+
+    public void MarkUpdateState(Guid deviceId, string connectionId, AgentUpdateState state)
+    {
+        lock (_lock)
+        {
+            if (!_devices.TryGetValue(deviceId, out var e) || e.ConnectionId != connectionId)
+                return;
+            e.Update = state;
+        }
+        Changed?.Invoke();
     }
 
     /// <summary>Aktuelle Verbindung eines PCs, null wenn er nicht verbunden ist.</summary>

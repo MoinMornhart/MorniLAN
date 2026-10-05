@@ -3,6 +3,7 @@ using MorniLAN.Agent;
 using MorniLAN.Agent.Connection;
 using MorniLAN.Agent.Inventory;
 using MorniLAN.Agent.Platform;
+using MorniLAN.Agent.Updates;
 using MorniLAN.Shared;
 using Serilog;
 using Serilog.Events;
@@ -58,6 +59,8 @@ builder.Services.AddSingleton(sp => AgentIdentity.LoadOrCreate(
     sp.GetRequiredService<ILogger<AgentIdentity>>()));
 builder.Services.AddSingleton<SystemStatusCollector>();
 builder.Services.AddSingleton<InventoryService>();
+builder.Services.AddSingleton<AgentUpdateService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
 builder.Services.AddSingleton<DiscoveryListener>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscoveryListener>());
 

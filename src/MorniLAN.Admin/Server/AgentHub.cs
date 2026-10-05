@@ -105,6 +105,14 @@ internal sealed class AgentHub(
         return Task.CompletedTask;
     }
 
+    public Task ReportUpdateState(MorniLAN.Shared.Updates.AgentUpdateState state)
+    {
+        var deviceId = RequirePairedDevice();
+        var message = state.Message.Length <= 300 ? state.Message : state.Message[..300];
+        registry.MarkUpdateState(deviceId, Context.ConnectionId, state with { Message = message });
+        return Task.CompletedTask;
+    }
+
     private Guid RequirePairedDevice() =>
         Context.Items.TryGetValue(DeviceKey, out var id) && id is Guid deviceId && registry.IsPaired(deviceId, Fingerprint)
             ? deviceId

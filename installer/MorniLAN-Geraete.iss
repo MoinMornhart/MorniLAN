@@ -38,7 +38,8 @@ Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
 CloseApplications=yes
-RestartApplications=no
+; Ein offener Launcher wird fürs Update geschlossen und danach wieder geöffnet (er meldet sich dafür an)
+RestartApplications=yes
 
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"

@@ -30,12 +30,12 @@ public class InventoryLiveTests
     /// „Freigaben“ ohne zweiten PC anzusehen. Ziel: Umgebungsvariable MORNILAN_PREVIEW_DIR.
     /// </summary>
     [Fact(Explicit = true)]
-    public void Live_FillAdminDataForPreview()
+    public async Task Live_FillAdminDataForPreview()
     {
         var target = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_DIR")
                      ?? throw new InvalidOperationException("MORNILAN_PREVIEW_DIR setzen");
         var service = new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance);
-        var report = service.RefreshAsync(TestContext.Current.CancellationToken).GetAwaiter().GetResult();
+        var report = await service.RefreshAsync(TestContext.Current.CancellationToken);
 
         var store = new MorniLAN.Admin.Server.InventoryStore(target);
         var deviceId = Guid.Parse("00000000-0000-0000-0000-00000000beef");

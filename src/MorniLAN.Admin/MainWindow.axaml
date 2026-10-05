@@ -81,6 +81,18 @@
             </Grid>
           </Border>
 
+          <!-- Update für das Panel selbst -->
+          <Border Classes="card pending" IsVisible="{Binding AdminUpdateAvailable}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="4">
+                <TextBlock Text="Update verfügbar" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="{Binding AdminUpdateText}" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <Button Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center" Classes="accent"
+                      Content="Jetzt aktualisieren" Command="{Binding InstallAdminUpdateCommand}" />
+            </Grid>
+          </Border>
+
           <!-- Firewall fehlt: Hinweis mit Knopf -->
           <Border Classes="card warning" IsVisible="{Binding FirewallMissing}">
             <Grid ColumnDefinitions="*,Auto">
@@ -134,7 +146,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:DeviceViewModel">
                 <Border Classes="card">
-                  <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto">
+                  <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
                     <Ellipse Width="12" Height="12" Margin="0,8,14,0" VerticalAlignment="Top"
                              Fill="{Binding StatusBrush}" />
                     <StackPanel Grid.Column="1" Spacing="2">
@@ -144,6 +156,15 @@
                     </StackPanel>
                     <Button Grid.Column="2" VerticalAlignment="Top" Content="{Binding UnpairText}"
                             Command="{Binding UnpairCommand}" />
+
+                    <!-- Update des PCs -->
+                    <Grid Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" Margin="0,12,0,0"
+                          IsVisible="{Binding HasUpdateText}">
+                      <TextBlock Text="{Binding UpdateText}" Foreground="{Binding UpdateBrush}" TextWrapping="Wrap"
+                                 VerticalAlignment="Center" />
+                      <Button Grid.Column="1" Margin="12,0,0,0" Classes="accent" Content="Jetzt aktualisieren"
+                              IsVisible="{Binding CanUpdate}" Command="{Binding InstallUpdateCommand}" />
+                    </Grid>
 
                     <UniformGrid Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Columns="3" Margin="0,14,0,0">
                       <StackPanel Spacing="2">
@@ -354,6 +375,20 @@
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
                          Text="Das X schließt dann nur das Fenster. Ganz beenden über das MorniLAN-Symbol unten rechts → Beenden." />
               <TextBlock Text="{Binding SettingsMessage}" Foreground="#3DDC84" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Updates" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Das Panel sucht beim Start und alle 6 Stunden auf GitHub nach neuen Versionen, Betas eingeschlossen. Die verwalteten PCs aktualisieren sich selbst, aber nie während eines Spiels; über die Karte des PCs geht es auch sofort." />
+              <TextBlock Text="{Binding Version}" />
+              <TextBlock Text="{Binding UpdateStatus}" Classes="muted" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Nach Updates suchen" Command="{Binding CheckForUpdatesCommand}" />
+                <Button Content="Jetzt aktualisieren" Classes="accent" IsVisible="{Binding AdminUpdateAvailable}"
+                        Command="{Binding InstallAdminUpdateCommand}" />
+              </StackPanel>
             </StackPanel>
           </Border>
         </StackPanel>
