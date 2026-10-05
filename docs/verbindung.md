@@ -53,7 +53,7 @@ Die Regeln gelten für jedes Netzwerkprofil, also auch für „Öffentlich“, a
 
 ## Feste Adresse (Tailscale ohne gemeinsames LAN)
 
-In `appsettings.json` neben `MorniLAN.Agent.exe`:
+Im Geräte-Setup auf der Seite „Admin-PC“ eintragen (landet in `%ProgramData%\MorniLAN\data\agent-settings.json`), oder für Entwickler in `appsettings.json` neben `MorniLAN.Agent.exe`:
 
 ```json
 "MorniLAN": { "Connection": { "AdminHost": "admin-pc.tail1234.ts.net" } }
@@ -61,10 +61,8 @@ In `appsettings.json` neben `MorniLAN.Agent.exe`:
 
 Alternativ beim Start: `MorniLAN.Agent.exe --MorniLAN:Connection:AdminHost=100.101.102.103`.
 
-## Test mit zweitem PC (ohne Installer)
+## Einrichten
 
-1. Admin-PC: `./build.ps1 -Task Publish` erzeugt `%LOCALAPPDATA%\MorniLAN\publish\`.
-2. Den Ordner `MorniLAN.Agent` auf den Test-PC kopieren (USB-Stick oder Netzlaufwerk). Dort ist kein .NET nötig.
-3. Test-PC: PowerShell als Administrator öffnen, im Ordner `./firewall.ps1 -Role Agent` ausführen, danach `./MorniLAN.Agent.exe` starten (als Konsole).
-4. Admin-PC: `./tools/firewall.ps1 -Role Admin` (einmalig, als Administrator), dann das Admin-Panel starten.
-5. Den Pairing-Code aus der Agent-Konsole im Panel eingeben.
+Seit M2.5 ohne Konsole: siehe [einrichtung.md](einrichtung.md). Das Geräte-Setup schreibt die Adresse des Admin-PCs nach `%ProgramData%\MorniLAN\data\agent-settings.json`, die Firewall richten Setup bzw. Panel selbst ein.
+
+Für Entwickler geht weiterhin `dotnet run --project src/MorniLAN.Agent` als Konsole, `tools/firewall.ps1` setzt dann die Regeln.

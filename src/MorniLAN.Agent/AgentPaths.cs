@@ -14,6 +14,12 @@ internal static class AgentPaths
     public static string Data => Path.Combine(Root, "data");
 
     /// <summary>
+    /// Vom Installer geschriebene Einstellungen (Abschnitt "MorniLAN:Connection"). Liegt im Datenordner,
+    /// den nur SYSTEM und Administratoren ändern dürfen: Der Freund kann den Agent nicht umlenken.
+    /// </summary>
+    public static string SettingsFile => Path.Combine(Data, "agent-settings.json");
+
+    /// <summary>
     /// Legt den Datenordner an. Läuft der Agent als Dienst (LocalSystem), dürfen nur SYSTEM und
     /// Administratoren hinein, damit der Freund Pin und Zertifikat weder lesen noch austauschen kann.
     /// Im Konsolenmodus (Entwicklung) bleiben die Standardrechte, sonst sperrt man sich selbst aus.

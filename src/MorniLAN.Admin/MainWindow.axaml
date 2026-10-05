@@ -4,6 +4,7 @@
         x:Class="MorniLAN.Admin.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="MorniLAN Admin"
+        Icon="avares://MorniLAN.Admin/Assets/mornilan.ico"
         Width="1200" Height="760" MinWidth="900" MinHeight="560"
         WindowStartupLocation="CenterScreen">
 
@@ -17,6 +18,14 @@
       <Setter Property="BorderBrush" Value="#4C8DFF" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
+    <Style Selector="Border.warning">
+      <Setter Property="BorderBrush" Value="#E8B04B" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+    <Style Selector="TextBlock.h2">
+      <Setter Property="FontSize" Value="18" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
     <Style Selector="TextBlock.muted">
       <Setter Property="Foreground" Value="#9AA3B2" />
     </Style>
@@ -25,6 +34,16 @@
       <Setter Property="FontSize" Value="11" />
     </Style>
   </Window.Styles>
+
+  <Window.Resources>
+    <DataTemplate x:Key="DiagRow" x:DataType="vm:DiagnosticRow">
+      <Grid ColumnDefinitions="Auto,260,*" Margin="0,3">
+        <Ellipse Width="9" Height="9" Margin="0,0,12,0" VerticalAlignment="Center" Fill="{Binding Brush}" />
+        <TextBlock Grid.Column="1" Text="{Binding Label}" Classes="muted" TextWrapping="Wrap" Margin="0,0,12,0" />
+        <SelectableTextBlock Grid.Column="2" Text="{Binding Value}" TextWrapping="Wrap" />
+      </Grid>
+    </DataTemplate>
+  </Window.Resources>
 
   <Grid ColumnDefinitions="220,*">
     <Border Grid.Column="0" Background="#15181E" Padding="12">
@@ -39,6 +58,7 @@
           <ListBoxItem Content="Freigaben" />
           <ListBoxItem Content="Fernzugriff" />
           <ListBoxItem Content="Aktionen" />
+          <ListBoxItem Content="Diagnose" />
           <ListBoxItem Content="Einstellungen" />
         </ListBox>
       </DockPanel>
@@ -58,6 +78,20 @@
                 <TextBlock Text="{Binding ServerStatus}" FontWeight="SemiBold" />
                 <TextBlock Text="{Binding ServerDetails}" Classes="muted" FontSize="12" TextWrapping="Wrap" />
               </StackPanel>
+            </Grid>
+          </Border>
+
+          <!-- Firewall fehlt: Hinweis mit Knopf -->
+          <Border Classes="card warning" IsVisible="{Binding FirewallMissing}">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Spacing="4">
+                <TextBlock Text="Firewall einrichten" FontWeight="SemiBold" FontSize="16" />
+                <TextBlock Text="{Binding FirewallText}" Classes="muted" TextWrapping="Wrap" />
+                <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                           Text="Erlaubt werden nur Geräte aus deinem Heimnetz und aus Tailscale. Windows fragt einmal nach Admin-Rechten." />
+              </StackPanel>
+              <Button Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center" Classes="accent"
+                      Content="Firewall einrichten" Command="{Binding SetupFirewallCommand}" />
             </Grid>
           </Border>
 
@@ -89,7 +123,7 @@
 
           <TextBlock Text="Gekoppelte PCs" FontSize="18" FontWeight="SemiBold" Margin="0,8,0,0" />
           <TextBlock IsVisible="{Binding HasNoDevices}" Classes="muted" TextWrapping="Wrap"
-                     Text="Noch kein PC gekoppelt. Starte den Agent auf dem PC – er findet das Panel im LAN und zeigt einen Pairing-Code an." />
+                     Text="Noch kein PC gekoppelt. Installiere „MorniLAN für Geräte“ auf dem PC. Er findet dieses Panel im Heimnetz von selbst und zeigt einen Pairing-Code an." />
 
           <ItemsControl ItemsSource="{Binding Devices}">
             <ItemsControl.ItemsPanel>
@@ -130,10 +164,112 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
+
+          <!-- Neuen PC hinzufügen: Adressen zum Abschreiben -->
+          <Border Classes="card" Margin="0,8,0,0">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Neuen PC hinzufügen" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="1. Auf dem PC „MorniLAN für Geräte“ installieren. 2. Im Heimnetz findet er dieses Panel von selbst. 3. Den Code aus seinem Fenster oben eingeben." />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Klappt die Suche nicht, z. B. über Tailscale oder in einem anderen Netz: Trag im Geräte-Setup bei „Adresse des Admin-PCs“ eine dieser Adressen ein." />
+              <ItemsControl ItemsSource="{Binding Addresses}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AddressItem">
+                    <Border Background="#15181E" CornerRadius="8" Padding="12,8" Margin="0,0,8,8">
+                      <StackPanel Orientation="Horizontal" Spacing="10">
+                        <StackPanel Spacing="0">
+                          <TextBlock Text="{Binding Kind}" Classes="label" />
+                          <SelectableTextBlock Text="{Binding Address}" FontFamily="Consolas, monospace" FontSize="15" />
+                        </StackPanel>
+                        <Button Content="Kopieren" VerticalAlignment="Center" FontSize="12"
+                                Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).CopyCommand}"
+                                CommandParameter="{Binding Address}" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Diagnose -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsDiagnostics}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Diagnose" FontSize="28" FontWeight="SemiBold" />
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+              <TextBlock Text="{Binding Diagnostics.LastRefresh}" Classes="muted" VerticalAlignment="Center" />
+              <Button Content="Aktualisieren" Command="{Binding Diagnostics.RefreshCommand}" />
+            </StackPanel>
+          </Grid>
+          <TextBlock Classes="muted" TextWrapping="Wrap"
+                     Text="Hier siehst du ohne Logdateien und Befehle, ob alles bereit ist. Rot heißt: da hakt es." />
+
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Server" Classes="h2" />
+              <ItemsControl ItemsSource="{Binding Diagnostics.ServerRows}" ItemTemplate="{StaticResource DiagRow}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Firewall" Classes="h2" />
+                <Button Grid.Column="1" Content="Firewall einrichten" Command="{Binding SetupFirewallCommand}" />
+              </Grid>
+              <ItemsControl ItemsSource="{Binding Diagnostics.FirewallRows}" ItemTemplate="{StaticResource DiagRow}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Netzwerk dieses PCs" Classes="h2" />
+              <ItemsControl ItemsSource="{Binding Diagnostics.NetworkRows}" ItemTemplate="{StaticResource DiagRow}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Gekoppelte PCs" Classes="h2" />
+              <ItemsControl ItemsSource="{Binding Diagnostics.DeviceRows}" ItemTemplate="{StaticResource DiagRow}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Letzte Log-Einträge" Classes="h2" />
+              <Border Background="#0F1115" CornerRadius="6" Padding="12">
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" MaxHeight="360">
+                  <SelectableTextBlock Text="{Binding Diagnostics.LogText}" FontFamily="Consolas, monospace" FontSize="12"
+                                       Foreground="#9AA3B2" />
+                </ScrollViewer>
+              </Border>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Einstellungen -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsSettings}">
+          <TextBlock Text="Einstellungen" FontSize="28" FontWeight="SemiBold" />
+          <Border Classes="card">
+            <StackPanel Spacing="14">
+              <ToggleSwitch IsChecked="{Binding StartWithWindows}" OnContent="Mit Windows starten" OffContent="Mit Windows starten" />
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                         Text="Das Panel startet beim Anmelden unsichtbar im Infobereich, damit PCs jederzeit online gehen können." />
+              <ToggleSwitch IsChecked="{Binding KeepRunningInTray}" OnContent="Beim Schließen im Infobereich weiterlaufen"
+                            OffContent="Beim Schließen im Infobereich weiterlaufen" />
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                         Text="Das X schließt dann nur das Fenster. Ganz beenden über das MorniLAN-Symbol unten rechts → Beenden." />
+              <TextBlock Text="{Binding SettingsMessage}" Foreground="#3DDC84" TextWrapping="Wrap" />
+            </StackPanel>
+          </Border>
         </StackPanel>
 
         <!-- Noch nicht umgesetzte Bereiche -->
-        <StackPanel Spacing="8" IsVisible="{Binding !IsOverview}">
+        <StackPanel Spacing="8" IsVisible="{Binding IsPlaceholder}">
           <TextBlock Text="{Binding PageTitle}" FontSize="28" FontWeight="SemiBold" />
           <TextBlock Text="{Binding PagePlaceholder}" Classes="muted" />
         </StackPanel>

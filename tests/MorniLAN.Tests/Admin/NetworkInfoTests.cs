@@ -35,6 +35,17 @@ public class NetworkInfoTests
         Assert.Equal(expected, NetworkInfo.IsTailscale(IPAddress.Parse(ip)));
     }
 
+    [Theory]
+    [InlineData("vEthernet (Default Switch)", "Hyper-V Virtual Ethernet Adapter", true)]
+    [InlineData("Ethernet 2", "VirtualBox Host-Only Ethernet Adapter", true)]
+    [InlineData("ZeroTier One", "ZeroTier Virtual Port", true)]
+    [InlineData("WLAN", "Killer(R) Wi-Fi 7 BE1775s Wireless Network Adapter", false)]
+    [InlineData("Ethernet", "Intel(R) Ethernet Controller I225-V", false)]
+    public void LooksVirtual_RecognizesVirtualAdapters(string name, string description, bool expected)
+    {
+        Assert.Equal(expected, NetworkInfo.LooksVirtual(name, description));
+    }
+
     [Fact]
     public void AdminEndpoints_EndsWithMachineName()
     {
