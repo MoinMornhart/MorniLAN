@@ -1,0 +1,77 @@
+name: Release
+
+# Ein Tag v1.2.3 (oder v1.2.3-beta.1) baut beide Setups und veröffentlicht sie als GitHub Release.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Setups bauen und veröffentlichen
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Version prüfen
+        shell: pwsh
+        run: |
+          $tag = '${{ github.ref_name }}'.TrimStart('v')
+          [xml]$props = Get-Content Directory.Build.props -Raw
+          $prefix = ($props.Project.PropertyGroup | Where-Object { $_.VersionPrefix } | Select-Object -First 1).VersionPrefix
+          $parts = $tag.Split('-', 2)
+          if ($parts[0] -ne $prefix) { throw "Tag v$tag passt nicht zu VersionPrefix $prefix in Directory.Build.props" }
+          $suffix = if ($parts.Count -gt 1) { $parts[1] } else { '' }
+          "VERSION_SUFFIX=$suffix" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Version $tag (Suffix: '$suffix')"
+
+      - name: Inno Setup installieren
+        run: choco install innosetup --no-progress -y
+
+      - name: Build & Test
+        shell: pwsh
+        run: ./build.ps1 -Task Test -VersionSuffix "$env:VERSION_SUFFIX"
+
+      - name: Setups bauen
+        shell: pwsh
+        run: ./build.ps1 -Task Installer -VersionSuffix "$env:VERSION_SUFFIX"
+
+      - name: Release veröffentlichen
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @(Get-ChildItem publish/installer/*.exe | ForEach-Object FullName)
+          if ($files.Count -ne 2) { throw "Erwartet 2 Setups, gefunden: $($files.Count)" }
+          $notes = @'
+          ## Download
+
+          | Für | Datei |
+          |---|---|
+          | **Deinen PC (Admin)** | `MorniLAN-Admin-Setup-….exe` |
+          | **Den PC, der verwaltet wird** | `MorniLAN-Geraete-Setup-….exe` |
+
+          1. Admin-PC: Admin-Setup ausführen, Panel öffnen, einmal **Firewall einrichten** klicken.
+          2. Verwalteter PC: Geräte-Setup ausführen (fragt einmal nach Admin-Rechten). Danach zeigt das MorniLAN-Fenster einen Pairing-Code.
+          3. Den Code im Admin-Panel eingeben. Fertig.
+
+          Windows zeigt beim ersten Start eventuell „Der Computer wurde durch Windows geschützt“, weil die Setups noch nicht signiert sind: **Weitere Informationen → Trotzdem ausführen**.
+
+          '@
+          $ghArgs = @('release', 'create', '${{ github.ref_name }}') + $files + @('--title', 'MorniLAN ${{ github.ref_name }}', '--notes', $notes, '--generate-notes')
+          if ($env:VERSION_SUFFIX) { $ghArgs += '--prerelease' }
+          gh @ghArgs
+          if ($LASTEXITCODE -ne 0) { throw "gh release create fehlgeschlagen (Exit $LASTEXITCODE)" }
