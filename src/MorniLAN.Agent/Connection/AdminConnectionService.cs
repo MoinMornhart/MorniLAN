@@ -74,7 +74,7 @@ internal sealed class AdminConnectionService(
         while (!stoppingToken.IsCancellationRequested)
         {
             var plan = EndpointPlanner.Plan(store.Current, _options.AdminHost, _options.AdminPort,
-                discovery?.Recent() ?? []);
+                discovery?.Recent() ?? [], NetworkInfo.LocalIPv4());
             if (plan.Count == 0)
             {
                 SetState(AgentLinkState.Searching);

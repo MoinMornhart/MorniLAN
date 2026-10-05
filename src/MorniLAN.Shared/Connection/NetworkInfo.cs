@@ -8,10 +8,25 @@ namespace MorniLAN.Shared.Connection;
 public static class NetworkInfo
 {
     /// <param name="IsVirtual">Adapter von Hyper-V, VirtualBox, VMware oder einem VPN: für andere PCs meist unerreichbar.</param>
-    public readonly record struct LocalAddress(IPAddress Address, IPAddress? Broadcast, bool IsTailscale, bool IsVirtual = false)
+    public readonly record struct LocalAddress(IPAddress Address, IPAddress? Broadcast, bool IsTailscale, bool IsVirtual = false,
+        int PrefixLength = 24)
     {
         public string Kind => IsTailscale ? "Tailscale" : IsVirtual ? "Virtuell" : "Heimnetz";
+
+        /// <summary>Liegt die Adresse im selben Netz wie diese eigene Adresse?</summary>
+        public bool Contains(IPAddress other) => InSameSubnet(Address, other, PrefixLength);
     }
+
+    public static bool InSameSubnet(IPAddress a, IPAddress b, int prefixLength)
+    {
+        if (a.AddressFamily != AddressFamily.InterNetwork || b.AddressFamily != AddressFamily.InterNetwork
+            || prefixLength is < 1 or > 32)
+            return false;
+        var mask = prefixLength == 32 ? uint.MaxValue : uint.MaxValue << (32 - prefixLength);
+        return (ToUInt(a) & mask) == (ToUInt(b) & mask);
+    }
+
+    private static uint ToUInt(IPAddress ip) => (uint)IPAddress.NetworkToHostOrder(BitConverter.ToInt32(ip.GetAddressBytes()));
 
     private static readonly string[] VirtualMarkers =
         ["Hyper-V", "VirtualBox", "VMware", "Virtual Ethernet", "vEthernet", "ZeroTier", "Radmin", "Hamachi", "TAP-Windows",
@@ -43,7 +58,7 @@ public static class NetworkInfo
                     continue;
                 var tailscale = IsTailscale(ip);
                 result.Add(new LocalAddress(ip, tailscale ? null : BroadcastOf(ip, unicast.PrefixLength), tailscale,
-                    !tailscale && LooksVirtual(nic.Name, nic.Description)));
+                    !tailscale && LooksVirtual(nic.Name, nic.Description), unicast.PrefixLength));
             }
         }
         return result;
