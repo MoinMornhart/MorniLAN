@@ -121,7 +121,10 @@ public sealed class AdminServer : IAsyncDisposable
     /// <summary>PC entfernen. Ist er gerade verbunden, erfährt der Agent es sofort.</summary>
     public async Task UnpairAsync(Guid deviceId)
     {
-        if (!Registry.Remove(deviceId, out var connectionId) || connectionId is null || _app is null)
+        if (!Registry.Remove(deviceId, out var connectionId))
+            return;
+        Log.Information("PC {DeviceId} vom Admin entkoppelt", deviceId);
+        if (connectionId is null || _app is null)
             return;
         var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
         await hub.Clients.Client(connectionId).OnUnpaired();
