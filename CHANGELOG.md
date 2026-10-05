@@ -5,6 +5,8 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 
 ## [Unreleased]
 
+## [0.2.0] – 2026-10-05
+
 ### Added
 - Projektmappe mit Agent (Worker Service), Launcher und Admin (Avalonia 12), Shared und Tests.
 - Zentrale Version in `Directory.Build.props`, zentrale Paketversionen in `Directory.Packages.props`.
@@ -32,3 +34,5 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 - Beacon enthält die eigenen Adressen des Panels, weil ein WLAN-Repeater im NAT-Modus die Absenderadresse umschreibt.
 - Falsche Pairing-Codes, Ablehnungen und Entkoppeln stehen im Panel-Log.
 - Virtuelle Netzwerkadapter (Hyper-V, VPN) werden erkannt und nach hinten sortiert.
+- Launcher bekam als Standardbenutzer keinen Zugriff auf den Statuskanal (öffnet jetzt nur lesend).
+- Versionsendung (z. B. `beta.1`) im Build-Skript.

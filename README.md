@@ -88,7 +88,7 @@ dotnet run --project src/MorniLAN.Agent      # als Konsolen-App; Logs in %Progra
 
 - [x] 1. Grundgerüst: Projektmappe, Shared-Modelle, README, Git, Build-Skript, CI
 - [x] 2. Verbindung Agent ↔ Admin mit Pairing und Heartbeat (LAN, dann Tailscale)
-- [ ] 2.5 Einrichtung ohne Konsole: Setups, Windows-Dienst, Firewall per Knopf, Diagnose
+- [x] 2.5 Einrichtung ohne Konsole: Setups, Windows-Dienst, Firewall per Knopf, Diagnose
 - [ ] 3. Programme und Steam-Spiele erkennen
 - [ ] 4. Freigaben
 - [ ] 5. Launcher als Shell
