@@ -39,15 +39,25 @@ internal sealed class DiscoveryListener(IOptions<AgentConnectionOptions> options
         {
             try
             {
-                using var udp = new UdpClient(AddressFamily.InterNetwork);
-                udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-                udp.Client.Bind(new IPEndPoint(IPAddress.Any, options.Value.DiscoveryPort));
+                using var udp = NetworkInfo.OpenDiscoverySocket(options.Value.DiscoveryPort);
                 logger.LogInformation("Suche Admin-Panel im LAN (UDP {Port})", options.Value.DiscoveryPort);
-                while (!stoppingToken.IsCancellationRequested)
+                using var querying = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+                var queries = SendQueriesAsync(udp, querying.Token);
+                try
                 {
-                    var received = await udp.ReceiveAsync(stoppingToken);
-                    if (DiscoveryBeacon.TryParse(received.Buffer, out var beacon))
-                        Remember(new SeenBeacon(beacon, received.RemoteEndPoint.Address, DateTimeOffset.UtcNow));
+                    while (!stoppingToken.IsCancellationRequested)
+                    {
+                        UdpReceiveResult received;
+                        try { received = await udp.ReceiveAsync(stoppingToken); }
+                        catch (SocketException) when (!stoppingToken.IsCancellationRequested) { continue; }
+                        if (DiscoveryBeacon.TryParse(received.Buffer, out var beacon))
+                            Remember(new SeenBeacon(beacon, received.RemoteEndPoint.Address, DateTimeOffset.UtcNow));
+                    }
+                }
+                finally
+                {
+                    await querying.CancelAsync();
+                    await queries;
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -60,6 +70,48 @@ internal sealed class DiscoveryListener(IOptions<AgentConnectionOptions> options
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
             }
         }
+    }
+
+    /// <summary>
+    /// Fragt regelmäßig selbst nach einem Panel. Die Antwort kommt direkt an diesen Socket, das
+    /// klappt auch, wenn der Router die Beacons vom Kabel-LAN nicht ins WLAN weiterreicht.
+    /// </summary>
+    private async Task SendQueriesAsync(UdpClient udp, CancellationToken cancellationToken)
+    {
+        var query = DiscoveryBeacon.Query.ToArray();
+        var failed = new HashSet<string>();
+        using var timer = new PeriodicTimer(options.Value.DiscoveryQueryInterval);
+        do
+        {
+            var targets = options.Value.DiscoveryQueryTargets
+                          ?? [.. NetworkInfo.BroadcastTargets().Select(a => new IPEndPoint(a, options.Value.DiscoveryPort))];
+            foreach (var target in targets)
+            {
+                try
+                {
+                    await udp.SendAsync(query, target, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (SocketException ex)
+                {
+                    if (failed.Add($"{target}|{ex.SocketErrorCode}"))
+                        logger.LogWarning("Suchanfrage an {Target} fehlgeschlagen: {Error}", target, ex.Message);
+                }
+            }
+
+            try
+            {
+                if (!await timer.WaitForNextTickAsync(cancellationToken))
+                    return;
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        } while (true);
     }
 
     private void Remember(SeenBeacon seen)

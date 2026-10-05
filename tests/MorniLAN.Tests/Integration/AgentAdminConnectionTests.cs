@@ -116,25 +116,61 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await StopAsync(reconnecting);
     }
 
+    [Fact]
+    public async Task Agent_FindsAdminViaDiscoveryQuery_WithoutConfiguredHost()
+    {
+        // Panel und Agent auf getrennten UDP-Ports: Die periodischen Beacons des Panels erreichen den
+        // Agent also nicht, er findet es nur über seine eigene Suchanfrage und die direkte Antwort.
+        var adminUdp = FreeUdpPort();
+        var agentUdp = FreeUdpPort();
+        await using var admin = await StartAdminAsync(_adminDir.Path, discoveryPort: adminUdp);
+
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path,
+            AdminHost = null,
+            EnableDiscovery = true,
+            DiscoveryPort = agentUdp,
+            DiscoveryQueryInterval = TimeSpan.FromMilliseconds(200),
+            DiscoveryQueryTargets = [new IPEndPoint(IPAddress.Loopback, adminUdp)],
+            HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        using var discovery = new DiscoveryListener(Options.Create(options), NullLogger<DiscoveryListener>.Instance);
+        await discovery.StartAsync(Ct);
+        var agent = await StartAgentAsync(options, discovery);
+
+        await WaitUntil(() => discovery.Recent().Count > 0, "Antwort auf Suchanfrage");
+        var seen = discovery.Recent()[0];
+        Assert.Equal(admin.Port, seen.Beacon.Port);
+        Assert.Equal(admin.Identity.Fingerprint, seen.Beacon.Fingerprint);
+
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        await WaitUntil(() => agent.State == AgentLinkState.Online, "Agent online über LAN-Suche");
+
+        await StopAsync(agent);
+        await discovery.StopAsync(CancellationToken.None);
+    }
+
     private string? PinnedFingerprint() => new AgentStateStore(_agentDir.Path).Current.Admin?.Fingerprint;
 
-    private static async Task<AdminServer> StartAdminAsync(string dataDirectory, int port = 0)
+    private static async Task<AdminServer> StartAdminAsync(string dataDirectory, int port = 0, int? discoveryPort = null)
     {
         var server = new AdminServer(new AdminServerOptions
         {
             DataDirectory = dataDirectory,
             BindAddress = IPAddress.Loopback,
             Port = port,
-            EnableDiscoveryBeacon = false,
+            EnableDiscoveryBeacon = discoveryPort is not null,
+            DiscoveryPort = discoveryPort ?? 0,
             Name = "TEST-ADMIN",
         });
         await server.StartAsync(Ct);
         return server;
     }
 
-    private async Task<AdminConnectionService> StartAgentAsync(int adminPort)
-    {
-        var options = Options.Create(new AgentConnectionOptions
+    private Task<AdminConnectionService> StartAgentAsync(int adminPort) =>
+        StartAgentAsync(new AgentConnectionOptions
         {
             DataDirectory = _agentDir.Path,
             AdminHost = "127.0.0.1",
@@ -142,11 +178,21 @@ public sealed class AgentAdminConnectionTests : IDisposable
             EnableDiscovery = false,
             HeartbeatInterval = TimeSpan.FromMilliseconds(300),
         });
-        var identity = AgentIdentity.LoadOrCreate(_agentDir.Path, NullLogger.Instance);
-        var service = new AdminConnectionService(options, new AgentStateStore(_agentDir.Path), identity,
-            new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance);
+
+    private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
+        DiscoveryListener? discovery = null)
+    {
+        var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
+        var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
+            identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery);
         await service.StartAsync(Ct);
         return service;
+    }
+
+    private static int FreeUdpPort()
+    {
+        using var udp = new System.Net.Sockets.UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+        return ((IPEndPoint)udp.Client.LocalEndPoint!).Port;
     }
 
     private static async Task StopAsync(AdminConnectionService agent)

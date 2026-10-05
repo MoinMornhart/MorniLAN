@@ -6,7 +6,11 @@ Stand: Meilenstein 2.
 
 - Das **Admin-Panel** betreibt den Server: Kestrel + SignalR über TLS auf **TCP 47950**.
 - Der **Agent** verbindet sich **ausgehend** zum Panel. Beim Freund ist also kein eingehender Port für die Verbindung nötig.
-- **LAN:** Das Panel sendet alle 3 Sekunden einen UDP-Broadcast (**UDP 47951**) mit Name, Port und Zertifikat-Fingerabdruck. Der Agent lauscht darauf.
+- **LAN:** Die Suche läuft über **UDP 47951**, und zwar in zwei Richtungen:
+  - Das Panel sendet alle 3 Sekunden einen Broadcast (Beacon) mit Name, Port und Zertifikat-Fingerabdruck.
+  - Der Agent fragt alle 5 Sekunden selbst per Broadcast „Ist hier ein Panel?“. Das Panel antwortet **direkt** an den Agent.
+
+  Der zweite Weg ist nötig, weil viele Router Broadcasts vom Kabel-LAN nicht ins WLAN weiterreichen. Getestet am 2026-10-05: Haupt-PC am Kabel, Test-PC im WLAN, keine Beacons angekommen.
 - **Tailscale:** Beim Pairing meldet das Panel alle eigenen Adressen, auch die Tailscale-IP (100.x.y.z). Steht der PC später nicht mehr im selben LAN, probiert der Agent diese Adressen der Reihe nach durch. Wurde nie im LAN gekoppelt, kann man die Adresse fest eintragen (siehe unten).
 
 ## Identität und Pairing
@@ -41,11 +45,11 @@ Weil beide Fingerabdrücke in den Beweis eingehen, passt er nicht mehr, sobald s
 
 ```powershell
 # als Administrator
-./tools/firewall.ps1 -Role Admin   # auf dem Admin-PC: TCP 47950 aus dem LAN und aus Tailscale
-./tools/firewall.ps1 -Role Agent   # auf dem Freundes-PC: UDP 47951 aus dem LAN (für die automatische Suche)
+./tools/firewall.ps1 -Role Admin   # auf dem Admin-PC: TCP 47950 (LAN + Tailscale), UDP 47951 (Suchanfragen aus dem LAN)
+./tools/firewall.ps1 -Role Agent   # auf dem Freundes-PC: UDP 47951 aus dem LAN (Beacons)
 ```
 
-Das Netzwerk muss in Windows als **„Privat“** eingestuft sein, sonst greift die LAN-Regel nicht. Wurde die Windows-Abfrage „Zugriff gestatten?“ mit *Abbrechen* beantwortet, hat Windows eine Blockier-Regel angelegt. Das Skript entfernt sie.
+Die Regeln gelten für jedes Netzwerkprofil, also auch für „Öffentlich“, aber nur für Geräte aus dem eigenen Subnetz. Wurde die Windows-Abfrage „Zugriff gestatten?“ mit *Abbrechen* beantwortet, hat Windows eine Blockier-Regel angelegt. Das Skript entfernt sie.
 
 ## Feste Adresse (Tailscale ohne gemeinsames LAN)
 

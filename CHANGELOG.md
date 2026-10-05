@@ -16,3 +16,9 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 - Heartbeat alle 15 s mit CPU, RAM und Systemlaufwerk; offline nach 45 s; automatischer Reconnect mit Wartezeit.
 - Admin-Panel: Übersicht mit Serverstatus, Pairing-Anfragen (Code-Eingabe, max. 5 Versuche) und gekoppelten PCs (online/offline, Werte, Entkoppeln). Logs unter `%LOCALAPPDATA%\MorniLAN\logs`.
 - `tools/firewall.ps1` für die nötigen Firewall-Regeln; `build.ps1 -Task Publish` legt es den Ausgaben bei.
+
+### Fixed
+- LAN-Suche zwischen Kabel-LAN und WLAN: Der Agent fragt jetzt selbst nach dem Panel, das Panel antwortet direkt (Unicast). Vorher kamen die Beacons über den Router nicht im WLAN an.
+- Beacon-Fehler werden geloggt, statt die Suche still zu beenden.
+- Es kann nur noch ein Agent pro PC laufen.
+- Firewall-Regeln gelten auch im Netzwerkprofil „Öffentlich“ (weiterhin nur aus dem eigenen Subnetz).

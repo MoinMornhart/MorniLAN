@@ -4,39 +4,103 @@ using MorniLAN.Shared.Connection;
 
 namespace MorniLAN.Admin.Server;
 
-/// <summary>Sendet alle paar Sekunden einen <see cref="DiscoveryBeacon"/> an alle LAN-Broadcast-Adressen.</summary>
-internal sealed class BeaconBroadcaster(DiscoveryBeacon beacon, int targetPort, ILogger logger)
+/// <summary>
+/// LAN-Suche auf Panel-Seite: sendet alle paar Sekunden einen <see cref="DiscoveryBeacon"/> an alle
+/// Broadcast-Adressen und beantwortet Suchanfragen von Agents direkt (Unicast).
+/// </summary>
+internal sealed class BeaconBroadcaster(DiscoveryBeacon beacon, int port, ILogger logger)
 {
+    private readonly byte[] _payload = beacon.ToBytes();
+    private readonly HashSet<string> _loggedErrors = [];
+    private readonly HashSet<IPAddress> _answered = [];
+
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        using var udp = new UdpClient(AddressFamily.InterNetwork) { EnableBroadcast = true };
-        var payload = beacon.ToBytes();
-        var lastError = string.Empty;
+        UdpClient udp;
+        var canReceive = true;
+        try
+        {
+            udp = NetworkInfo.OpenDiscoverySocket(port);
+        }
+        catch (SocketException ex)
+        {
+            // Port belegt o. ä.: dann wenigstens senden, Suchanfragen gehen verloren.
+            logger.LogWarning("UDP {Port} nicht verfügbar ({Error}), beantworte keine Suchanfragen", port, ex.Message);
+            udp = new UdpClient(AddressFamily.InterNetwork) { EnableBroadcast = true };
+            canReceive = false;
+        }
+
+        using (udp)
+        {
+            logger.LogInformation("LAN-Suche aktiv: Beacon alle {Seconds} s an {Targets} (UDP {Port})",
+                ConnectionDefaults.BeaconInterval.TotalSeconds, string.Join(", ", NetworkInfo.BroadcastTargets()), port);
+            await Task.WhenAll(
+                SendLoopAsync(udp, cancellationToken),
+                canReceive ? ReceiveLoopAsync(udp, cancellationToken) : Task.CompletedTask);
+        }
+    }
+
+    private async Task SendLoopAsync(UdpClient udp, CancellationToken cancellationToken)
+    {
         using var timer = new PeriodicTimer(ConnectionDefaults.BeaconInterval);
         do
         {
-            foreach (var target in Targets())
+            try
             {
-                try
+                foreach (var target in NetworkInfo.BroadcastTargets())
                 {
-                    await udp.SendAsync(payload, new IPEndPoint(target, targetPort), cancellationToken);
+                    try
+                    {
+                        await udp.SendAsync(_payload, new IPEndPoint(target, port), cancellationToken);
+                    }
+                    catch (SocketException ex)
+                    {
+                        LogOnce($"{target}|{ex.SocketErrorCode}", "Beacon an {Target} fehlgeschlagen: {Error}", target, ex.Message);
+                    }
                 }
-                catch (SocketException ex) when (ex.Message != lastError)
-                {
-                    // Jeden Fehler nur einmal loggen, sonst läuft das Log alle 3 s voll.
-                    lastError = ex.Message;
-                    logger.LogWarning("Beacon an {Target} fehlgeschlagen: {Error}", target, ex.Message);
-                }
-                catch (SocketException)
-                {
-                }
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (Exception ex)
+            {
+                // Nie still aussteigen: ein Fehler (z. B. beim Abfragen der Netzwerkkarten) wird
+                // gemeldet, und im nächsten Takt geht es weiter.
+                LogOnce(ex.GetType().Name, "Beacon-Fehler: {Error}", ex.Message);
             }
         } while (await WaitAsync(timer, cancellationToken));
     }
 
-    private static IEnumerable<IPAddress> Targets() =>
-        NetworkInfo.LocalIPv4().Select(a => a.Broadcast).OfType<IPAddress>()
-            .Append(IPAddress.Broadcast).Distinct();
+    private async Task ReceiveLoopAsync(UdpClient udp, CancellationToken cancellationToken)
+    {
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                var received = await udp.ReceiveAsync(cancellationToken);
+                if (!DiscoveryBeacon.IsQuery(received.Buffer))
+                    continue;
+                await udp.SendAsync(_payload, received.RemoteEndPoint, cancellationToken);
+                if (_answered.Add(received.RemoteEndPoint.Address))
+                    logger.LogInformation("Suchanfrage von {Address} beantwortet", received.RemoteEndPoint.Address);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return;
+            }
+            catch (SocketException ex)
+            {
+                LogOnce($"recv|{ex.SocketErrorCode}", "Suchanfrage nicht beantwortet: {Error}", ex.Message);
+            }
+        }
+    }
+
+    private void LogOnce(string key, string message, params object?[] args)
+    {
+        if (_loggedErrors.Add(key))
+            logger.LogWarning(message, args);
+    }
 
     private static async Task<bool> WaitAsync(PeriodicTimer timer, CancellationToken cancellationToken)
     {

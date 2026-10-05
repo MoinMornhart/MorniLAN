@@ -2,12 +2,12 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
 
-namespace MorniLAN.Admin.Server;
+namespace MorniLAN.Shared.Connection;
 
 /// <summary>Eigene IPv4-Adressen und Broadcast-Ziele des Admin-PCs.</summary>
-internal static class NetworkInfo
+public static class NetworkInfo
 {
-    internal readonly record struct LocalAddress(IPAddress Address, IPAddress? Broadcast, bool IsTailscale);
+    public readonly record struct LocalAddress(IPAddress Address, IPAddress? Broadcast, bool IsTailscale);
 
     public static IReadOnlyList<LocalAddress> LocalIPv4()
     {
@@ -54,7 +54,7 @@ internal static class NetworkInfo
         return b.Length == 4 && b[0] == 100 && (b[1] & 0xC0) == 64;
     }
 
-    internal static IPAddress? BroadcastOf(IPAddress ip, int prefixLength)
+    public static IPAddress? BroadcastOf(IPAddress ip, int prefixLength)
     {
         if (prefixLength is <= 0 or >= 31)
             return null;
@@ -62,6 +62,36 @@ internal static class NetworkInfo
         var mask = uint.MaxValue << (32 - prefixLength);
         var broadcast = address | ~mask;
         return new IPAddress(BitConverter.GetBytes(IPAddress.HostToNetworkOrder((int)broadcast)));
+    }
+
+    /// <summary>Broadcast-Adressen aller LAN-Netze plus 255.255.255.255.</summary>
+    public static IReadOnlyList<IPAddress> BroadcastTargets() =>
+        [.. LocalIPv4().Select(a => a.Broadcast).OfType<IPAddress>().Append(IPAddress.Broadcast).Distinct()];
+
+    /// <summary>
+    /// UDP-Socket für die LAN-Suche: an den Port gebunden (mit ReuseAddress, damit Agent und Panel
+    /// auf einem Rechner laufen können), Broadcast erlaubt. Ohne SIO_UDP_CONNRESET bricht Windows
+    /// das Empfangen ab, sobald ein Ziel mit "Port nicht erreichbar" antwortet.
+    /// </summary>
+    public static UdpClient OpenDiscoverySocket(int port)
+    {
+        var udp = new UdpClient(AddressFamily.InterNetwork) { EnableBroadcast = true };
+        try
+        {
+            udp.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            if (OperatingSystem.IsWindows())
+            {
+                const int SioUdpConnReset = -1744830452;
+                udp.Client.IOControl(SioUdpConnReset, [0, 0, 0, 0], null);
+            }
+            udp.Client.Bind(new IPEndPoint(IPAddress.Any, port));
+            return udp;
+        }
+        catch
+        {
+            udp.Dispose();
+            throw;
+        }
     }
 
     public static string? Display(IPAddress? ip) =>

@@ -23,4 +23,10 @@ public sealed class AgentConnectionOptions
     public int DiscoveryPort { get; set; } = MorniLanConstants.DiscoveryPort;
 
     public TimeSpan HeartbeatInterval { get; set; } = ConnectionDefaults.HeartbeatInterval;
+
+    /// <summary>So oft fragt der Agent im LAN nach einem Admin-Panel.</summary>
+    public TimeSpan DiscoveryQueryInterval { get; set; } = TimeSpan.FromSeconds(5);
+
+    /// <summary>Nur für Tests: feste Ziele für Suchanfragen statt der Broadcast-Adressen.</summary>
+    internal IReadOnlyList<System.Net.IPEndPoint>? DiscoveryQueryTargets { get; set; }
 }
