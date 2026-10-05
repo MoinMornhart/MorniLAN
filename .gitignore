@@ -1,0 +1,54 @@
+# Build-Ausgaben
+artifacts/
+publish/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+TestResults/
+*.binlog
+coverage*.xml
+coverage*.json
+
+# Visual Studio / Rider / VS Code
+.vs/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.DotSettings.user
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/
+
+# Installer-Ausgaben
+installer/output/
+*.msi
+*.exe
+
+# Lokale Daten & Geheimnisse
+*.db
+*.db-shm
+*.db-wal
+*.pfx
+*.pem
+*.key
+appsettings.Local.json
+.env
+
+# Betriebssystem / iCloud
+Thumbs.db
+desktop.ini
+.DS_Store
+*.icloud
+
+# Claude Code (lokal)
+.claude/settings.local.json
