@@ -5,7 +5,7 @@
 
 MorniLAN verwaltet einen Windows-PC, den ein Freund benutzt. Der Freund hat ein eigenes Standardkonto und sieht statt des Desktops einen **Launcher** mit genau den Apps und Spielen, die der Admin freigegeben hat. Der Admin steuert alles bequem vom eigenen PC aus: Freigaben, Status, Fernzugriff und Updates. Das funktioniert im selben LAN oder über **Tailscale**, ohne Portfreigaben.
 
-> **Status:** frühe Entwicklung (Meilenstein 1 – Grundgerüst). Screenshots folgen, sobald Launcher und Admin-Panel Inhalte zeigen.
+> **Status:** frühe Entwicklung (Meilenstein 2 – Verbindung Agent ↔ Admin, siehe [docs/verbindung.md](docs/verbindung.md)). Screenshots folgen, sobald Launcher und Admin-Panel mehr Inhalte zeigen.
 
 ## Komponenten
 
