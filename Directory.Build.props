@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+    Zentrale Versionsnummer (SemVer) für alle Komponenten.
+    Nur hier ändern. CI kann ein Suffix setzen: -p:VersionSuffix=beta.1
+  -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <Product>MorniLAN</Product>
+    <Company>MoinMornhart</Company>
+    <Authors>MoinMornhart</Authors>
+    <Copyright>Copyright © 2026 MoinMornhart</Copyright>
+    <RepositoryUrl>https://github.com/MoinMornhart/MorniLAN</RepositoryUrl>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NeutralLanguage>de-DE</NeutralLanguage>
+    <SatelliteResourceLanguages>de;en</SatelliteResourceLanguages>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Build-Ausgaben (bin/obj) lokal NICHT im iCloud-Ordner ablegen, sondern unter
+    %LOCALAPPDATA%\MorniLAN\artifacts. Auf CI (CI=true) bleibt alles im Repo unter .\artifacts.
+  -->
+  <PropertyGroup Condition="'$(CI)' != 'true' and '$(LOCALAPPDATA)' != ''">
+    <ArtifactsPath>$(LOCALAPPDATA)\MorniLAN\artifacts</ArtifactsPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ArtifactsPath)' == ''">
+    <ArtifactsPath>$(MSBuildThisFileDirectory)artifacts</ArtifactsPath>
+  </PropertyGroup>
+
+</Project>
