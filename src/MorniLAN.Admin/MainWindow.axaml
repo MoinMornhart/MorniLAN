@@ -1,0 +1,30 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="MorniLAN.Admin.MainWindow"
+        Title="MorniLAN Admin"
+        Width="1200" Height="760" MinWidth="900" MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+  <!-- Grundgerüst für Meilenstein 1. Die Bereiche werden ab Meilenstein 2 mit Leben gefüllt. -->
+  <Grid ColumnDefinitions="220,*">
+    <Border Grid.Column="0" Background="#15181E" Padding="12">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Spacing="2" Margin="8,8,8,20">
+          <TextBlock Text="MorniLAN" FontSize="22" FontWeight="Bold" />
+          <TextBlock Text="Admin-Panel" FontSize="12" Foreground="#9AA3B2" />
+        </StackPanel>
+        <TextBlock x:Name="VersionText" DockPanel.Dock="Bottom" Margin="8" FontSize="11" Foreground="#5C6575" />
+        <ListBox x:Name="Navigation" SelectedIndex="0" Background="Transparent">
+          <ListBoxItem Content="Übersicht" />
+          <ListBoxItem Content="Freigaben" />
+          <ListBoxItem Content="Fernzugriff" />
+          <ListBoxItem Content="Aktionen" />
+          <ListBoxItem Content="Einstellungen" />
+        </ListBox>
+      </DockPanel>
+    </Border>
+    <StackPanel Grid.Column="1" Margin="32" Spacing="8">
+      <TextBlock Text="Übersicht" FontSize="28" FontWeight="SemiBold" />
+      <TextBlock Text="Noch kein PC gekoppelt. Das Pairing folgt in Meilenstein 2." Foreground="#9AA3B2" />
+    </StackPanel>
+  </Grid>
+</Window>
