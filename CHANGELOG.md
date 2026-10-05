@@ -11,6 +11,11 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 - Die Liste wird nach dem Verbinden, alle 15 Minuten bei Änderungen und auf Wunsch übertragen; Bilder nur einmal, vom Panel geprüft.
 - Automatische Updates über GitHub-Releases (aus M9 vorgezogen): Admin-Panel mit „Update verfügbar → Jetzt aktualisieren“, Geräte aktualisieren sich selbst (nie während eines Steam-Spiels) oder per Knopf im Panel. Setup-Prüfsumme (SHA-256) ist Pflicht. Betas werden mit angeboten.
 
+### Fixed
+- Admin-Panel stürzte beim Beenden ab (Stapelüberlauf: Beenden schloss das Fenster, das Schließen rief wieder Beenden auf). Betraf „Beenden“ im Infobereich und das Selbst-Update.
+- Selbst-Update wartet, bis das Panel wirklich beendet ist, statt fest 3 Sekunden; das Setup schließt ein hängendes Panel notfalls selbst.
+- Agent probiert Panel-Adressen im eigenen Netz zuerst (schneller hinter Repeatern, mit VPN- oder Hyper-V-Adaptern).
+
 ## [0.2.0] – 2026-10-05
 
 ### Added

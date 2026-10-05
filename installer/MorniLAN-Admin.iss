@@ -35,7 +35,7 @@ UninstallDisplayName=MorniLAN Admin
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
-CloseApplications=yes
+CloseApplications=force
 RestartApplications=no
 
 [Languages]

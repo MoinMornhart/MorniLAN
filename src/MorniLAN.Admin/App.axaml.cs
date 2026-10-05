@@ -62,7 +62,11 @@ public partial class App : Application
 
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (!_exiting && _viewModel?.KeepRunningInTray == true)
+        // Beim Beenden schließt Shutdown() selbst das Fenster: nicht erneut Exit() aufrufen (Endlosschleife,
+        // Stapelüberlauf beim Update, gefunden 2026-10-05).
+        if (_exiting)
+            return;
+        if (_viewModel?.KeepRunningInTray == true)
         {
             e.Cancel = true;
             _window?.Hide();
@@ -73,6 +77,8 @@ public partial class App : Application
 
     private void Exit()
     {
+        if (_exiting)
+            return;
         _exiting = true;
         _desktop?.Shutdown();
     }
