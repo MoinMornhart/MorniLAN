@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\MorniLAN.Shared\MorniLAN.Shared.csproj" />
     <ProjectReference Include="..\..\src\MorniLAN.Agent\MorniLAN.Agent.csproj" />
+    <ProjectReference Include="..\..\src\MorniLAN.Admin\MorniLAN.Admin.csproj" />
   </ItemGroup>
 
 </Project>

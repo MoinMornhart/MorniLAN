@@ -1,0 +1,318 @@
+using System.Security.Cryptography.X509Certificates;
+using System.Threading.Channels;
+using Microsoft.AspNetCore.Http.Connections;
+using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
+using MorniLAN.Agent.Platform;
+using MorniLAN.Shared;
+using MorniLAN.Shared.Connection;
+using MorniLAN.Shared.Models;
+using MorniLAN.Shared.Security;
+
+namespace MorniLAN.Agent.Connection;
+
+public enum AgentLinkState
+{
+    /// <summary>Kein Admin-Panel bekannt oder erreichbar.</summary>
+    Searching,
+
+    /// <summary>Verbunden, wartet darauf, dass der Admin den Pairing-Code eingibt.</summary>
+    WaitingForPairing,
+
+    /// <summary>Gekoppelt und online, Heartbeats laufen.</summary>
+    Online,
+}
+
+/// <summary>
+/// Hält die Verbindung zum Admin-Panel: Panel finden, per TLS verbinden (eigenes Client-Zertifikat,
+/// Panel-Zertifikat gepinnt), bei Bedarf koppeln, danach Heartbeats senden. Bricht die Verbindung ab,
+/// geht es mit Wartezeit von vorne los.
+/// </summary>
+internal sealed class AdminConnectionService(
+    IOptions<AgentConnectionOptions> options,
+    AgentStateStore store,
+    AgentIdentity identity,
+    SystemStatusCollector statusCollector,
+    ILogger<AdminConnectionService> logger,
+    DiscoveryListener? discovery = null) : BackgroundService
+{
+    private static readonly TimeSpan[] Backoff =
+        [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
+
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(8);
+
+    private readonly AgentConnectionOptions _options = options.Value;
+    private readonly DeviceInfo _deviceInfo = new(store.Current.DeviceId, Environment.MachineName,
+        WindowsEditionDetector.Detect(), VersionInfo.Version);
+    private string? _pairingCode;
+
+    public AgentLinkState State { get; private set; } = AgentLinkState.Searching;
+
+    /// <summary>Aktueller Code in Normalform, solange nicht gekoppelt (für Tests und später den Launcher).</summary>
+    public string? PairingCode => Volatile.Read(ref _pairingCode);
+
+    public event Action<AgentLinkState>? StateChanged;
+
+    private enum SessionOutcome { Unreachable, Ended }
+
+    private abstract record ServerEvent;
+    private sealed record Approved(PairingApproval Approval) : ServerEvent;
+    private sealed record Rejected(string Reason) : ServerEvent;
+    private sealed record Unpaired : ServerEvent;
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        logger.LogInformation("Geräte-ID {DeviceId}, Zertifikat {Fingerprint}", _deviceInfo.DeviceId,
+            CertificateFingerprint.Short(identity.Fingerprint));
+        if (store.Current.Admin is { } admin)
+            logger.LogInformation("Gekoppelt mit Admin-Panel {Name}", admin.Name);
+
+        var failures = 0;
+        var announcedSearch = false;
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            var plan = EndpointPlanner.Plan(store.Current, _options.AdminHost, _options.AdminPort,
+                discovery?.Recent() ?? []);
+            if (plan.Count == 0)
+            {
+                SetState(AgentLinkState.Searching);
+                if (!announcedSearch)
+                    logger.LogInformation("Kein Admin-Panel bekannt, warte auf LAN-Beacon …");
+                announcedSearch = true;
+                await WaitForBeaconAsync(TimeSpan.FromSeconds(10), stoppingToken);
+                continue;
+            }
+
+            var reached = false;
+            foreach (var endpoint in plan)
+            {
+                if (stoppingToken.IsCancellationRequested)
+                    break;
+                if (await RunSessionAsync(endpoint, stoppingToken) == SessionOutcome.Unreachable)
+                    continue;
+                reached = true;
+                break;
+            }
+
+            SetState(AgentLinkState.Searching);
+            failures = reached ? 0 : failures + 1;
+            if (!reached && failures == 1)
+                logger.LogWarning("Admin-Panel nicht erreichbar ({Targets}), versuche es weiter",
+                    string.Join(", ", plan.Select(e => $"{e.Host}:{e.Port}")));
+            await WaitForBeaconAsync(Backoff[Math.Min(failures, Backoff.Length - 1)], stoppingToken);
+        }
+    }
+
+    private async Task<SessionOutcome> RunSessionAsync(AdminEndpoint endpoint, CancellationToken stoppingToken)
+    {
+        string? adminFingerprint = null;
+        var events = Channel.CreateUnbounded<ServerEvent>();
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        await using var connection = BuildConnection(endpoint, fp => adminFingerprint = fp);
+        connection.Closed += _ =>
+        {
+            closed.TrySetResult();
+            return Task.CompletedTask;
+        };
+        connection.On<PairingApproval>(nameof(IAgentClient.OnPairingApproved), a => events.Writer.TryWrite(new Approved(a)));
+        connection.On<string>(nameof(IAgentClient.OnPairingRejected), r => events.Writer.TryWrite(new Rejected(r)));
+        connection.On(nameof(IAgentClient.OnUnpaired), () => events.Writer.TryWrite(new Unpaired()));
+
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
+            timeout.CancelAfter(ConnectTimeout);
+            await connection.StartAsync(timeout.Token);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogDebug("{Host}:{Port} ({Source}) nicht erreichbar: {Error}", endpoint.Host, endpoint.Port,
+                endpoint.Source, ex.Message);
+            return SessionOutcome.Unreachable;
+        }
+
+        try
+        {
+            logger.LogInformation("Verbunden mit {Host}:{Port} ({Source})", endpoint.Host, endpoint.Port, endpoint.Source);
+            var hello = await connection.InvokeAsync<HelloResponse>(nameof(IAdminHub.Hello),
+                new HelloRequest(_deviceInfo), stoppingToken);
+
+            if (hello.Status == HelloStatus.PairingRequired)
+            {
+                if (store.Current.Admin is not null)
+                {
+                    logger.LogWarning("Das Admin-Panel kennt diesen PC nicht mehr, neues Pairing nötig");
+                    ForgetAdmin();
+                }
+                if (!await PairAsync(connection, endpoint, adminFingerprint!, hello, events.Reader, closed.Task,
+                        stoppingToken))
+                    return SessionOutcome.Ended;
+                hello = await connection.InvokeAsync<HelloResponse>(nameof(IAdminHub.Hello),
+                    new HelloRequest(_deviceInfo), stoppingToken);
+                if (hello.Status != HelloStatus.Paired)
+                    return SessionOutcome.Ended;
+            }
+
+            store.Update(s => s.Admin is null ? s : s with
+            {
+                Admin = s.Admin with { Name = hello.AdminName, Endpoints = hello.AdminEndpoints, LastEndpoint = endpoint.Host },
+            });
+            SetState(AgentLinkState.Online);
+            logger.LogInformation("Online bei Admin-Panel {Name}", hello.AdminName);
+            await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
+        }
+        catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+        {
+            logger.LogWarning("Verbindung zu {Host} beendet: {Error}", endpoint.Host, ex.Message);
+        }
+        return SessionOutcome.Ended;
+    }
+
+    private async Task<bool> PairAsync(HubConnection connection, AdminEndpoint endpoint, string adminFingerprint,
+        HelloResponse hello, ChannelReader<ServerEvent> events, Task closed, CancellationToken stoppingToken)
+    {
+        var code = PairingCodeOrNew();
+        var transcript = new PairingTranscript(_deviceInfo.DeviceId, identity.Fingerprint, adminFingerprint);
+        var key = await Task.Run(() => PairingProof.DeriveKey(code, transcript), stoppingToken);
+        var proof = Convert.ToBase64String(PairingProof.Sign(key, PairingRole.Agent, transcript));
+
+        await connection.InvokeAsync(nameof(IAdminHub.RequestPairing), new PairingRequest(_deviceInfo, proof),
+            stoppingToken);
+        SetState(AgentLinkState.WaitingForPairing);
+        logger.LogWarning("PAIRING-CODE: {Code}  ← im Admin-Panel auf \"{Admin}\" eingeben",
+            Shared.Connection.PairingCode.Format(code), hello.AdminName);
+
+        var next = await NextEventAsync(events, closed, stoppingToken);
+        switch (next)
+        {
+            case Approved approved when PairingProof.Verify(key, PairingRole.Admin, transcript, approved.Approval.AdminProof):
+                await connection.InvokeAsync<HelloResponse>(nameof(IAdminHub.ConfirmPairing), stoppingToken);
+                store.Update(s => s with
+                {
+                    Admin = new PinnedAdmin(adminFingerprint, hello.AdminName, endpoint.Port, hello.AdminEndpoints,
+                        endpoint.Host, DateTimeOffset.UtcNow),
+                });
+                Volatile.Write(ref _pairingCode, null);
+                logger.LogInformation("Gekoppelt mit Admin-Panel {Name} (Zertifikat {Fingerprint})", hello.AdminName,
+                    CertificateFingerprint.Short(adminFingerprint));
+                return true;
+            case Approved:
+                // Das Panel kennt den Code nicht → jemand hat sich dazwischengeschaltet.
+                logger.LogError("Gegenbeweis des Admin-Panels ist falsch, Pairing abgebrochen (möglicher Angriff)");
+                NewPairingCode();
+                return false;
+            case Rejected rejected:
+                logger.LogWarning("Pairing abgelehnt: {Reason}. Neuer Code wird erzeugt.", rejected.Reason);
+                NewPairingCode();
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private async Task HeartbeatLoopAsync(HubConnection connection, ChannelReader<ServerEvent> events, Task closed,
+        CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(_options.HeartbeatInterval);
+        var nextEvent = NextEventAsync(events, closed, stoppingToken);
+        do
+        {
+            await connection.InvokeAsync(nameof(IAdminHub.Heartbeat), statusCollector.Collect(_deviceInfo.DeviceId),
+                stoppingToken);
+            var tick = timer.WaitForNextTickAsync(stoppingToken).AsTask();
+            if (await Task.WhenAny(tick, nextEvent) == tick)
+                continue;
+            if (await nextEvent is Unpaired)
+            {
+                logger.LogWarning("Der Admin hat diesen PC entfernt, neues Pairing nötig");
+                ForgetAdmin();
+            }
+            return;
+        } while (!stoppingToken.IsCancellationRequested);
+    }
+
+    /// <summary>Nächstes Server-Ereignis, oder null wenn die Verbindung zu ist.</summary>
+    private static async Task<ServerEvent?> NextEventAsync(ChannelReader<ServerEvent> events, Task closed,
+        CancellationToken stoppingToken)
+    {
+        var read = events.ReadAsync(stoppingToken).AsTask();
+        return await Task.WhenAny(read, closed) == read ? await read : null;
+    }
+
+    private HubConnection BuildConnection(AdminEndpoint endpoint, Action<string> onAdminCertificate)
+    {
+        var uri = new UriBuilder(Uri.UriSchemeHttps, endpoint.Host, endpoint.Port, ConnectionDefaults.HubPath).Uri;
+        return new HubConnectionBuilder()
+            .WithUrl(uri, http =>
+            {
+                http.SkipNegotiation = true;
+                http.Transports = HttpTransportType.WebSockets;
+                http.WebSocketConfiguration = ws =>
+                {
+                    ws.ClientCertificates = new X509CertificateCollection { identity.Certificate };
+                    ws.RemoteCertificateValidationCallback = (_, certificate, _, _) =>
+                    {
+                        // Kein CA-Check: Vertrauen entsteht nur über Pinning bzw. den Pairing-Beweis.
+                        if (certificate is null)
+                            return false;
+                        var fingerprint = CertificateFingerprint.Of(certificate);
+                        if (endpoint.ExpectedFingerprint is { } expected && !CertificateFingerprint.AreEqual(fingerprint, expected))
+                            return false;
+                        onAdminCertificate(fingerprint);
+                        return true;
+                    };
+                };
+            })
+            .AddJsonProtocol(o => SignalRJson.Configure(o.PayloadSerializerOptions))
+            .WithServerTimeout(ConnectionDefaults.OfflineAfter)
+            .WithKeepAliveInterval(ConnectionDefaults.HeartbeatInterval)
+            .Build();
+    }
+
+    /// <summary>Wartet die Zeit ab, endet aber früher, sobald im LAN ein neues Panel auftaucht.</summary>
+    private async Task WaitForBeaconAsync(TimeSpan timeout, CancellationToken stoppingToken)
+    {
+        var wait = discovery?.WaitForNewBeaconAsync(timeout, stoppingToken) ?? Task.Delay(timeout, stoppingToken);
+        await wait.ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+    }
+
+    private void ForgetAdmin()
+    {
+        store.Update(s => s with { Admin = null });
+        NewPairingCode();
+    }
+
+    private string PairingCodeOrNew() => PairingCode ?? NewPairingCode();
+
+    private string NewPairingCode()
+    {
+        var code = Shared.Connection.PairingCode.Generate();
+        Volatile.Write(ref _pairingCode, code);
+        return code;
+    }
+
+    private void SetState(AgentLinkState state)
+    {
+        if (State == state)
+            return;
+        State = state;
+        StateChanged?.Invoke(state);
+    }
+}
+
+/// <summary>Zertifikat des Agents (DPAPI-geschützt im Datenordner).</summary>
+internal sealed class AgentIdentity(X509Certificate2 certificate)
+{
+    public X509Certificate2 Certificate { get; } = certificate;
+    public string Fingerprint { get; } = CertificateFingerprint.Of(certificate);
+
+    public static AgentIdentity LoadOrCreate(string dataDirectory, ILogger logger)
+    {
+        var certificate = CertificateIdentityStore.LoadOrCreate(Path.Combine(dataDirectory, "agent-identity.bin"),
+            $"MorniLAN Agent {Environment.MachineName}", out var created);
+        if (created)
+            logger.LogInformation("Neues Agent-Zertifikat erzeugt");
+        return new AgentIdentity(certificate);
+    }
+}

@@ -44,28 +44,38 @@ $dotnet = Find-Dotnet
 $versionArgs = if ($VersionSuffix) { @("-p:VersionSuffix=$VersionSuffix") } else { @() }
 
 Write-Host "==> MorniLAN | $Task | $Configuration" -ForegroundColor Cyan
-& $dotnet --version
 
-switch ($Task) {
-    'Clean' {
-        Invoke-Dotnet clean $solution -c $Configuration
-        if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
-    }
-    'Build' {
-        Invoke-Dotnet build $solution -c $Configuration @versionArgs
-    }
-    'Test' {
-        Invoke-Dotnet build $solution -c $Configuration @versionArgs
-        Invoke-Dotnet test --solution $solution -c $Configuration --no-build
-    }
-    'Publish' {
-        foreach ($app in $apps) {
-            $proj = Join-Path $root "src\$app\$app.csproj"
-            Invoke-Dotnet publish $proj -c $Configuration -r win-x64 --self-contained `
-                -p:PublishSingleFile=true -o (Join-Path $publishDir $app) @versionArgs
+# global.json (SDK-Version, Testplattform) wird nur im Repo-Ordner gefunden.
+Push-Location $root
+try {
+    & $dotnet --version
+
+    switch ($Task) {
+        'Clean' {
+            Invoke-Dotnet clean $solution -c $Configuration
+            if (Test-Path $publishDir) { Remove-Item $publishDir -Recurse -Force }
         }
-        Write-Host "==> Ausgabe: $publishDir" -ForegroundColor Green
+        'Build' {
+            Invoke-Dotnet build $solution -c $Configuration @versionArgs
+        }
+        'Test' {
+            Invoke-Dotnet build $solution -c $Configuration @versionArgs
+            Invoke-Dotnet test --solution $solution -c $Configuration --no-build
+        }
+        'Publish' {
+            foreach ($app in $apps) {
+                $proj = Join-Path $root "src\$app\$app.csproj"
+                $out = Join-Path $publishDir $app
+                Invoke-Dotnet publish $proj -c $Configuration -r win-x64 --self-contained `
+                    -p:PublishSingleFile=true -o $out @versionArgs
+                # Firewall-Skript mitliefern, damit es auf dem Zielrechner griffbereit ist.
+                if ($app -ne 'MorniLAN.Launcher') { Copy-Item (Join-Path $root 'tools\firewall.ps1') $out -Force }
+            }
+            Write-Host "==> Ausgabe: $publishDir" -ForegroundColor Green
+        }
     }
+} finally {
+    Pop-Location
 }
 
 Write-Host '==> Fertig' -ForegroundColor Green
