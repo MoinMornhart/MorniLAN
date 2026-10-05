@@ -13,6 +13,9 @@ internal static class AgentPaths
 
     public static string Data => Path.Combine(Root, "data");
 
+    /// <summary>Vom Installer geschriebene Einstellungen (Abschnitt "MorniLAN:Connection").</summary>
+    public static string SettingsFile => Path.Combine(Root, "agent-settings.json");
+
     /// <summary>
     /// Legt den Datenordner an. Läuft der Agent als Dienst (LocalSystem), dürfen nur SYSTEM und
     /// Administratoren hinein, damit der Freund Pin und Zertifikat weder lesen noch austauschen kann.

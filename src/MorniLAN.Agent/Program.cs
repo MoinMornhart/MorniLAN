@@ -25,6 +25,11 @@ Directory.CreateDirectory(AgentPaths.Logs);
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// Einstellungen des Installers (z. B. Adresse des Admin-PCs) liegen außerhalb des Programmordners,
+// damit sie Updates überstehen. Befehlszeilenargumente haben weiterhin Vorrang.
+builder.Configuration.AddJsonFile(AgentPaths.SettingsFile, optional: true, reloadOnChange: false);
+builder.Configuration.AddCommandLine(args);
+
 builder.Services.AddWindowsService(options => options.ServiceName = MorniLanConstants.AgentServiceName);
 
 builder.Services.AddSerilog((_, lc) => lc
@@ -55,7 +60,9 @@ builder.Services.AddSingleton<DiscoveryListener>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscoveryListener>());
 
 builder.Services.AddHostedService<AgentWorker>();
-builder.Services.AddHostedService<AdminConnectionService>();
+builder.Services.AddSingleton<AdminConnectionService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<AdminConnectionService>());
+builder.Services.AddHostedService<LocalStatusServer>();
 
 var host = builder.Build();
 host.Run();
