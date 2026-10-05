@@ -32,6 +32,17 @@ Im Admin-Panel erscheint nach wenigen Sekunden **„… möchte gekoppelt werden
 - **Der PC findet das Panel nicht:** Liegen beide im selben Netz (Adressen beginnen gleich, z. B. `192.168.178.`)? Hängt der PC vielleicht im Gast-WLAN? Notfalls die Adresse im Geräte-Setup eintragen (Setup einfach erneut ausführen).
 - **Neu koppeln:** Im Panel zweimal „Entkoppeln“ klicken. Der PC zeigt sofort einen neuen Code.
 
+## Updates
+
+Ab Version 0.3.0 musst du nichts mehr von Hand installieren:
+
+- **Admin-Panel:** Es sucht beim Start und alle 6 Stunden auf GitHub nach einer neuen Version. Gibt es eine, steht oben in der Übersicht **„Update verfügbar“**. Ein Klick auf **Jetzt aktualisieren** lädt sie, prüft die Prüfsumme, installiert sie und startet das Panel neu. In *Einstellungen → Updates* gibt es auch **Nach Updates suchen**.
+- **Verwaltete PCs:** Sie aktualisieren sich selbst (zwei Minuten nach dem Start, dann alle 6 Stunden), aber **nie, solange ein Steam-Spiel läuft**. Dann wartet das Update. Auf der Karte des PCs im Panel steht „Update auf … verfügbar“ mit **Jetzt aktualisieren** und darunter, was der PC gerade tut (lädt, installiert, wartet aufs Spielende).
+- Testversionen (Beta) werden mit angeboten.
+- Ein Update wird nur installiert, wenn die SHA-256-Prüfsumme, die GitHub zum Setup anzeigt, stimmt.
+
+Einmalig von Hand: Versionen **vor 0.3.0** kennen die Update-Funktion noch nicht. Installiere 0.3.0 (oder neuer) also einmal selbst über die Release-Seite, danach geht es automatisch.
+
 ## Deinstallieren
 
 *Einstellungen → Apps → „MorniLAN für Geräte“ bzw. „MorniLAN Admin“ → Deinstallieren.* Dienst und Firewall-Regeln werden entfernt. Kopplung und Logs bleiben in `%ProgramData%\MorniLAN` bzw. `%LOCALAPPDATA%\MorniLAN` erhalten, damit eine Neuinstallation ohne neues Pairing auskommt. Wer sie nicht mehr braucht, löscht die Ordner.
