@@ -15,6 +15,8 @@ internal sealed class AgentHub(
     AdminIdentity identity,
     InventoryStore inventory,
     PolicyStore policies,
+    DeviceProfileStore profiles,
+    HelpInbox help,
     TimeProvider time,
     ILogger<AgentHub> logger) : Hub<IAgentClient>, IAdminHub
 {
@@ -121,6 +123,27 @@ internal sealed class AgentHub(
         var deviceId = RequirePairedDevice();
         policies.MarkApplied(deviceId, revision);
         logger.LogInformation("PC {DeviceId} wendet Freigaben-Stand {Revision} an", deviceId, revision);
+        return Task.CompletedTask;
+    }
+
+    public Task ReportProfiles(LauncherProfile[] reported)
+    {
+        var deviceId = RequirePairedDevice();
+        if (reported.Length > LauncherProfile.MaxProfiles * 2)
+            throw new HubException("Zu viele Profile.");
+        profiles.Save(deviceId, reported);
+        return Task.CompletedTask;
+    }
+
+    public Task RequestHelp(HelpRequest request)
+    {
+        var deviceId = RequirePairedDevice();
+        var name = registry.Snapshot().FirstOrDefault(d => d.Device.DeviceId == deviceId) is { } d
+            ? d.Info?.MachineName ?? d.Device.MachineName
+            : "PC";
+        var profile = request.ProfileName is { Length: > LauncherProfile.MaxNameLength } tooLong ? tooLong[..LauncherProfile.MaxNameLength] : request.ProfileName;
+        help.Add(new HelpNotice(deviceId, name, request with { ProfileName = profile }, time.GetUtcNow()));
+        logger.LogInformation("Hilfe angefordert auf {Machine} ({Profile})", name, profile ?? "ohne Profil");
         return Task.CompletedTask;
     }
 

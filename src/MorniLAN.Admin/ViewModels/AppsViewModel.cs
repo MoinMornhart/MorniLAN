@@ -17,6 +17,27 @@ public sealed record DeviceChoice(Guid Id, string Name)
     public override string ToString() => Name;
 }
 
+/// <summary>Für wen die Schalter gelten: alle Profile (Regeln des PCs) oder ein einzelnes Profil.</summary>
+public sealed record ScopeChoice(string? ProfileId, string Name)
+{
+    public override string ToString() => Name;
+}
+
+/// <summary>Ein Profil in der Verwaltung.</summary>
+public sealed class ProfileRowViewModel(LauncherProfile profile, int ownRules)
+{
+    public LauncherProfile Profile { get; } = profile;
+    public string Name => Profile.Name;
+    public string Initial => Profile.Name.Length > 0 ? char.ToUpperInvariant(Profile.Name[0]).ToString() : "?";
+    public IBrush Brush { get; } = new SolidColorBrush(Color.Parse(ProfileColors.Normalize(profile.Color)));
+    public string Details => ownRules switch
+    {
+        0 => "folgt den Freigaben des PCs",
+        1 => "1 eigene Abweichung",
+        _ => $"{ownRules} eigene Abweichungen",
+    };
+}
+
 /// <summary>Ein Programm, Spiel oder eine Store-App in der Liste, mit Schalter „freigegeben“.</summary>
 public sealed partial class AppItemViewModel : ObservableObject
 {
@@ -137,6 +158,102 @@ public sealed partial class AppsViewModel : ObservableObject
     public ObservableCollection<DeviceChoice> Devices { get; } = [];
     public ObservableCollection<AppItemViewModel> Games { get; } = [];
     public ObservableCollection<AppItemViewModel> Apps { get; } = [];
+    public ObservableCollection<ScopeChoice> Scopes { get; } = [];
+    public ObservableCollection<ProfileRowViewModel> ProfileRows { get; } = [];
+
+    /// <summary>Für wen die Schalter gerade gelten (null-Profil = alle Profile, also der PC).</summary>
+    [ObservableProperty] public partial ScopeChoice? SelectedScope { get; set; }
+    [ObservableProperty] public partial bool HasProfiles { get; set; }
+    [ObservableProperty] public partial string NewProfileName { get; set; } = "";
+    [ObservableProperty] public partial string ProfileMessage { get; set; } = "";
+    [ObservableProperty] public partial bool ProfileCreationAllowed { get; set; } = true;
+    [ObservableProperty] public partial string ScopeHint { get; set; } = "";
+    private bool _syncingProfiles;
+
+    private string? ScopeProfileId => SelectedScope?.ProfileId;
+
+    partial void OnSelectedScopeChanged(ScopeChoice? value)
+    {
+        if (_syncingProfiles)
+            return;
+        ScopeHint = value?.ProfileId is null
+            ? "Die Schalter gelten für alle Profile, solange ein Profil nichts Eigenes hat."
+            : $"Die Schalter gelten nur für „{value.Name}“. Was hier gleich wie beim PC ist, folgt automatisch dem PC.";
+        PolicyChanged(SelectedDevice?.Id ?? Guid.Empty);
+    }
+
+    partial void OnProfileCreationAllowedChanged(bool value)
+    {
+        if (!_syncingProfiles)
+            ChangePolicy((p, now) => p.WithProfileCreationBlocked(!value, now));
+    }
+
+    /// <summary>Profile eines PCs haben sich geändert (vom PC gemeldet).</summary>
+    public void ProfilesChanged(Guid deviceId)
+    {
+        if (deviceId == SelectedDevice?.Id)
+            LoadProfiles();
+    }
+
+    private void LoadProfiles()
+    {
+        _syncingProfiles = true;
+        try
+        {
+            var selected = SelectedScope?.ProfileId;
+            Scopes.Clear();
+            ProfileRows.Clear();
+            if (_server() is not { } server || SelectedDevice is not { } device)
+            {
+                HasProfiles = false;
+                return;
+            }
+            var policy = server.Policies.Get(device.Id);
+            var profiles = server.Profiles.Get(device.Id);
+            Scopes.Add(new ScopeChoice(null, "Alle Profile"));
+            foreach (var profile in profiles)
+            {
+                Scopes.Add(new ScopeChoice(profile.Id, profile.Name));
+                ProfileRows.Add(new ProfileRowViewModel(profile,
+                    policy.ProfileRules?.FirstOrDefault(r => r.ProfileId == profile.Id)?.Rules.Length ?? 0));
+            }
+            HasProfiles = profiles.Length > 0;
+            ProfileCreationAllowed = !policy.BlockProfileCreation;
+            SelectedScope = Scopes.FirstOrDefault(s => s.ProfileId == selected) ?? Scopes[0];
+        }
+        finally
+        {
+            _syncingProfiles = false;
+        }
+        OnSelectedScopeChanged(SelectedScope);
+    }
+
+    [RelayCommand]
+    private async Task CreateProfileAsync()
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+            return;
+        if (LauncherProfile.ValidateName(NewProfileName) is { } error)
+        {
+            ProfileMessage = error;
+            return;
+        }
+        var color = ProfileColors.All[server.Profiles.Get(device.Id).Length % ProfileColors.All.Length];
+        ProfileMessage = await server.CreateProfileAsync(device.Id, NewProfileName, color)
+            ? $"Profil „{NewProfileName.Trim()}“ wird auf dem PC angelegt …"
+            : "Profile lassen sich nur anlegen, während der PC online ist.";
+        NewProfileName = "";
+    }
+
+    [RelayCommand]
+    private async Task DeleteProfileAsync(ProfileRowViewModel row)
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+            return;
+        ProfileMessage = await server.DeleteProfileAsync(device.Id, row.Profile.Id)
+            ? $"Profil „{row.Name}“ wird gelöscht …"
+            : "Profile lassen sich nur löschen, während der PC online ist.";
+    }
 
     [ObservableProperty] public partial DeviceChoice? SelectedDevice { get; set; }
     [ObservableProperty] public partial string SearchText { get; set; } = "";
@@ -165,6 +282,8 @@ public sealed partial class AppsViewModel : ObservableObject
     partial void OnSelectedDeviceChanged(DeviceChoice? value)
     {
         OnPropertyChanged(nameof(HasDevice));
+        ProfileMessage = "";
+        LoadProfiles();
         LoadReport();
     }
 
@@ -187,9 +306,26 @@ public sealed partial class AppsViewModel : ObservableObject
             return;
         var policy = server.Policies.Get(deviceId);
         foreach (var item in _all)
-            item.Sync(policy.IsAllowed(item.App.Id));
+            item.Sync(policy.IsAllowed(item.App.Id, ScopeProfileId));
+        if (!_syncingProfiles)
+        {
+            ProfileCreationAllowedSync(!policy.BlockProfileCreation);
+            // Anzahl eigener Abweichungen je Profil aktualisieren
+            var rows = ProfileRows.Select(r => new ProfileRowViewModel(r.Profile,
+                policy.ProfileRules?.FirstOrDefault(p => p.ProfileId == r.Profile.Id)?.Rules.Length ?? 0)).ToList();
+            ProfileRows.Clear();
+            foreach (var row in rows)
+                ProfileRows.Add(row);
+        }
         UpdatePolicyStatus();
         ApplyFilter();
+    }
+
+    private void ProfileCreationAllowedSync(bool allowed)
+    {
+        _syncingProfiles = true;
+        ProfileCreationAllowed = allowed;
+        _syncingProfiles = false;
     }
 
     /// <summary>Nur die Geräteauswahl abgleichen (billig, läuft regelmäßig). Lädt nur bei geänderter Auswahl.</summary>
@@ -231,7 +367,7 @@ public sealed partial class AppsViewModel : ObservableObject
         foreach (var custom in policy.CustomApps.Where(c => apps.All(a => a.Id != c.Id)))
             apps.Add(new AppEntry(custom.Id, custom.Name, AppSource.Custom, ExecutablePath: custom.ExecutablePath,
                 LaunchArguments: custom.Arguments));
-        _all = apps.Select(a => new AppItemViewModel(a, server.Inventory, policy.IsAllowed(a.Id), SetAllowed)).ToList();
+        _all = apps.Select(a => new AppItemViewModel(a, server.Inventory, policy.IsAllowed(a.Id, ScopeProfileId), SetAllowed)).ToList();
         _collectedAt = report?.CollectedAt;
         EmptyText = report is null
             ? $"„{device.Name}“ hat noch keine Programmliste geschickt. Ist der PC online? Sonst auf „Neu einlesen“ klicken."
@@ -310,8 +446,16 @@ public sealed partial class AppsViewModel : ObservableObject
             target.Add(item);
     }
 
-    private void SetAllowed(AppItemViewModel item, bool allowed) =>
-        ChangePolicy((p, now) => p.WithAllowed([item.App.Id], allowed, now));
+    private void SetAllowed(AppItemViewModel item, bool allowed) => SetAllowed([item.App.Id], allowed);
+
+    /// <summary>Für den PC (alle Profile) oder nur für das gewählte Profil.</summary>
+    private void SetAllowed(IReadOnlyList<string> ids, bool allowed)
+    {
+        var profileId = ScopeProfileId;
+        ChangePolicy(profileId is null
+            ? (p, now) => p.WithAllowed(ids, allowed, now)
+            : (p, now) => p.WithAllowedForProfile(profileId, ids, allowed, now));
+    }
 
     /// <summary>Alle gerade sichtbaren Einträge (Suche und Filter) auf einmal.</summary>
     [RelayCommand]
@@ -324,7 +468,7 @@ public sealed partial class AppsViewModel : ObservableObject
     {
         var ids = _visible.Select(i => i.App.Id).ToList();
         if (ids.Count > 0)
-            ChangePolicy((p, now) => p.WithAllowed(ids, allowed, now));
+            SetAllowed(ids, allowed);
     }
 
     [RelayCommand]

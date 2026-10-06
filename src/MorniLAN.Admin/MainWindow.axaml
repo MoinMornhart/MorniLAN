@@ -71,6 +71,28 @@
         <StackPanel Spacing="16" IsVisible="{Binding IsOverview}">
           <TextBlock Text="Übersicht" FontSize="28" FontWeight="SemiBold" />
 
+          <!-- Hilfe-Anfragen aus dem Launcher -->
+          <ItemsControl ItemsSource="{Binding HelpNotices}" IsVisible="{Binding HasHelpNotices}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:HelpNoticeViewModel">
+                <Border Background="#3A2E17" BorderBrush="#E8B04B" BorderThickness="1" CornerRadius="10" Padding="16,12"
+                        Margin="0,0,0,8">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock Text="?" FontSize="22" FontWeight="Bold" Foreground="#E8B04B" VerticalAlignment="Center"
+                               Margin="0,0,14,0" />
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="15" />
+                      <TextBlock Text="{Binding Time}" Classes="muted" FontSize="12" />
+                    </StackPanel>
+                    <Button Grid.Column="2" Content="Erledigt"
+                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).DismissHelpCommand}"
+                            CommandParameter="{Binding}" />
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
           <Border Classes="card" Padding="16">
             <Grid ColumnDefinitions="Auto,*">
               <Ellipse Width="10" Height="10" Margin="0,5,12,0" VerticalAlignment="Top" Fill="{Binding ServerBrush}" />
@@ -233,6 +255,56 @@
           </Grid>
           <TextBlock Classes="muted" TextWrapping="Wrap"
                      Text="Alles, was auf dem PC installiert ist. Der Schalter legt fest, was im Launcher erscheint. Standard: alles frei, du sperrst gezielt. (Wirklich blockiert wird Gesperrtes ab Meilenstein 6.)" />
+
+          <!-- Profile des PCs -->
+          <Border Classes="card" IsVisible="{Binding Apps.HasDevice}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="Profile" Classes="h2" />
+                <ToggleSwitch Grid.Column="1" IsChecked="{Binding Apps.ProfileCreationAllowed}"
+                              OnContent="Am PC neue Profile anlegen erlaubt" OffContent="Am PC neue Profile anlegen gesperrt" />
+              </Grid>
+              <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !Apps.HasProfiles}"
+                         Text="Noch keine Profile. Beim Start fragt der Launcher „Wer spielt?“, dort lassen sich Profile anlegen (oder hier)." />
+              <ItemsControl ItemsSource="{Binding Apps.ProfileRows}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ProfileRowViewModel">
+                    <Border Background="#15181E" CornerRadius="10" Padding="12,8" Margin="0,0,10,10">
+                      <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Border Width="32" Height="32" CornerRadius="16" Background="{Binding Brush}">
+                          <TextBlock Text="{Binding Initial}" FontWeight="Bold" Foreground="#0F1115"
+                                     HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Details}" Classes="label" />
+                        </StackPanel>
+                        <Button Content="Löschen" VerticalAlignment="Center"
+                                Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Apps.DeleteProfileCommand}"
+                                CommandParameter="{Binding}" />
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBox Width="220" Text="{Binding Apps.NewProfileName}" PlaceholderText="Neues Profil, z. B. Lena" />
+                <Button Content="Profil anlegen" Command="{Binding Apps.CreateProfileCommand}" />
+                <TextBlock Text="{Binding Apps.ProfileMessage}" Classes="muted" VerticalAlignment="Center" />
+              </StackPanel>
+              <Grid ColumnDefinitions="Auto,*" IsVisible="{Binding Apps.HasProfiles}">
+                <ComboBox ItemsSource="{Binding Apps.Scopes}" SelectedItem="{Binding Apps.SelectedScope}" MinWidth="200"
+                          ToolTip.Tip="Für wen die Schalter unten gelten" />
+                <TextBlock Grid.Column="1" Margin="12,0,0,0" Text="{Binding Apps.ScopeHint}" Classes="muted"
+                           VerticalAlignment="Center" TextWrapping="Wrap" />
+              </Grid>
+            </StackPanel>
+          </Border>
 
           <!-- Stand auf dem PC, Sammel-Knöpfe, eigener Eintrag -->
           <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding Apps.HasDevice}">

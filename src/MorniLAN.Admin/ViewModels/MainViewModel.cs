@@ -103,6 +103,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Pairing.Changed += OnServerChanged;
             server.Inventory.Changed += OnInventoryChanged;
             server.Policies.Changed += OnPolicyChanged;
+            server.Profiles.Changed += OnProfilesChanged;
+            server.Help.Changed += OnHelpChanged;
             ServerStatus =$"Bereit – wartet auf PCs (Port {server.Port})";
             ServerDetails = $"Name im Netzwerk {server.Identity.Name} · Zertifikat {CertificateFingerprint.Short(server.Identity.Fingerprint)}";
             ServerBrush = DeviceViewModel.OnlineBrush;
@@ -282,6 +284,34 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnPolicyChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.PolicyChanged(deviceId));
 
+    private void OnProfilesChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.ProfilesChanged(deviceId));
+
+    /// <summary>Offene Hilfe-Anfragen (Banner auf der Übersicht). Eine neue holt das Fenster nach vorne.</summary>
+    public ObservableCollection<HelpNoticeViewModel> HelpNotices { get; } = [];
+
+    [ObservableProperty] public partial bool HasHelpNotices { get; set; }
+
+    /// <summary>Fenster zeigen (gesetzt von App), z. B. bei einer Hilfe-Anfrage aus dem Infobereich.</summary>
+    public Action? RequestShow { get; set; }
+
+    private void OnHelpChanged(HelpNotice? added) => Dispatcher.UIThread.Post(() =>
+    {
+        if (_server is not { } server)
+            return;
+        HelpNotices.Clear();
+        foreach (var notice in server.Help.Open.OrderByDescending(n => n.ReceivedAt))
+            HelpNotices.Add(new HelpNoticeViewModel(notice));
+        HasHelpNotices = HelpNotices.Count > 0;
+        if (added is not null)
+        {
+            SelectedNavIndex = 0; // Übersicht
+            RequestShow?.Invoke();
+        }
+    });
+
+    [RelayCommand]
+    private void DismissHelp(HelpNoticeViewModel notice) => _server?.Help.Dismiss(notice.Notice.Request.Id);
+
     private void Refresh()
     {
         if (_server is not { } server)
@@ -333,6 +363,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Pairing.Changed -= OnServerChanged;
             server.Inventory.Changed -= OnInventoryChanged;
             server.Policies.Changed -= OnPolicyChanged;
+            server.Profiles.Changed -= OnProfilesChanged;
+            server.Help.Changed -= OnHelpChanged;
             await server.DisposeAsync();
         }
     }

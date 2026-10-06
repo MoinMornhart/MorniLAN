@@ -62,8 +62,12 @@ builder.Services.AddSingleton(sp => AgentIdentity.LoadOrCreate(
 builder.Services.AddSingleton<SystemStatusCollector>();
 builder.Services.AddSingleton(sp => new AgentPolicyStore(
     sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory));
+builder.Services.AddSingleton(sp => new AgentProfileStore(
+    sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory));
 builder.Services.AddSingleton<InventoryService>();
 builder.Services.AddSingleton<LauncherCatalog>();
+builder.Services.AddSingleton<LauncherInboxService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<LauncherInboxService>());
 builder.Services.AddSingleton<AgentUpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
 builder.Services.AddSingleton<DiscoveryListener>();
