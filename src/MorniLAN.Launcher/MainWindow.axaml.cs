@@ -36,6 +36,7 @@ public partial class MainWindow : Window
         }
 
         _viewModel.FocusRequested += () => Dispatcher.UIThread.Post(FocusDefault, DispatcherPriority.Background);
+        _viewModel.PickImageFile = PickImageFileAsync;
         _refreshTimer.Tick += async (_, _) => await _viewModel.RefreshAsync();
         _clockTimer.Tick += (_, _) => _viewModel.UpdateClock();
         _systemTimer.Tick += async (_, _) => await _viewModel.UpdateSystemAsync();
@@ -88,6 +89,10 @@ public partial class MainWindow : Window
                 break;
             case Key.Enter when focused is TextBox && _viewModel.ShowNewProfile:
                 _viewModel.CreateProfileCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.Enter when _viewModel.IsPassword:
+                _viewModel.ConfirmPasswordCommand.Execute(null);
                 e.Handled = true;
                 break;
         }
@@ -203,12 +208,32 @@ public partial class MainWindow : Window
         control.BringIntoView();
     }
 
+    /// <summary>Lässt den Nutzer eine Bilddatei wählen (für Hintergrund oder Avatar).</summary>
+    private async Task<string?> PickImageFileAsync()
+    {
+        var files = await StorageProvider.OpenFilePickerAsync(new Avalonia.Platform.Storage.FilePickerOpenOptions
+        {
+            Title = "Bild auswählen",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new Avalonia.Platform.Storage.FilePickerFileType("Bilder") { Patterns = ["*.png", "*.jpg", "*.jpeg", "*.bmp", "*.webp"] },
+            ],
+        });
+        return files.Count > 0 ? files[0].Path.LocalPath : null;
+    }
+
     /// <summary>Sinnvoller Startpunkt je Ansicht: Dialogfeld, zuletzt gewähltes Profil oder erste Kachel.</summary>
     private void FocusDefault()
     {
         if (_viewModel.ShowNewProfile)
         {
             NewProfileNameBox.Focus(NavigationMethod.Directional);
+            return;
+        }
+        if (_viewModel.IsPassword)
+        {
+            PasswordBox.Focus(NavigationMethod.Directional);
             return;
         }
         if (_viewModel.ShowPower)

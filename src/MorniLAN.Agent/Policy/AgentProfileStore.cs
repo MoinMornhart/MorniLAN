@@ -51,6 +51,39 @@ internal sealed class AgentProfileStore
         return profile;
     }
 
+    /// <summary>Wendet eine Profil-Änderung des Nutzers an (Farbe, Thema, Passwort, Bilder). Prüft jeden Wert.</summary>
+    public bool Edit(MorniLAN.Shared.Models.LauncherInbox.ProfileEdit edit)
+    {
+        lock (_lock)
+        {
+            var index = Array.FindIndex(_profiles, p => p.Id == edit.ProfileId);
+            if (index < 0)
+                return false;
+            var profile = _profiles[index];
+            if (edit.Color is not null)
+                profile = profile with { Color = ProfileColors.Normalize(edit.Color) };
+            if (edit.Theme is not null)
+                profile = profile with { Theme = ProfileThemes.Normalize(edit.Theme) };
+            if (edit.PasswordHash is not null)
+                profile = profile with { PasswordHash = edit.PasswordHash.Length == 0 ? null : edit.PasswordHash };
+            if (!ProfilePassword.LooksLikeHash(profile.PasswordHash))
+                return false; // kaputter Hash: nicht übernehmen
+            if (edit.HasCustomBackground is { } bg)
+                profile = profile with { HasCustomBackground = bg };
+            if (edit.HasAvatar is { } avatar)
+                profile = profile with { HasAvatar = avatar };
+            var updated = _profiles.ToArray();
+            updated[index] = profile;
+            Save(updated);
+        }
+        Changed?.Invoke(Current);
+        return true;
+    }
+
+    /// <summary>Admin setzt das Passwort eines Profils zurück (entfernt es), falls der Nutzer es vergisst.</summary>
+    public bool ClearPassword(string profileId) =>
+        Edit(new MorniLAN.Shared.Models.LauncherInbox.ProfileEdit(profileId, PasswordHash: ""));
+
     public bool Remove(string profileId)
     {
         lock (_lock)

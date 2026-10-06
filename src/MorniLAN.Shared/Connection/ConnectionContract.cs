@@ -109,6 +109,9 @@ public interface IAgentClient
 
     /// <summary>Der Admin will die Sperren jetzt neu anwenden (z. B. „Sperren jetzt aktivieren“).</summary>
     Task OnApplyRestrictions();
+
+    /// <summary>Der Admin setzt das Passwort eines Profils zurück (der Nutzer hat es vergessen).</summary>
+    Task OnResetProfilePassword(string profileId);
 }
 
 public enum HelloStatus

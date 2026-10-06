@@ -65,7 +65,8 @@ internal sealed class LauncherCatalog(InventoryService inventory, AgentPolicySto
             sha.AppendData(app.Cover ?? []);
         }
         foreach (var profile in profiles)
-            sha.AppendData(Encoding.UTF8.GetBytes($"P{profile.Id}\n{profile.Name}\n{profile.Color}\n"));
+            sha.AppendData(Encoding.UTF8.GetBytes(
+                $"P{profile.Id}\n{profile.Name}\n{profile.Color}\n{profile.Theme}\n{profile.HasPassword}\n{profile.HasCustomBackground}\n{profile.HasAvatar}\n"));
         sha.AppendData(creationBlocked ? [1] : [0]);
         return Convert.ToHexStringLower(sha.GetHashAndReset())[..16];
     }

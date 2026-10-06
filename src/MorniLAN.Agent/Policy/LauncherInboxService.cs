@@ -150,6 +150,12 @@ internal sealed class LauncherInboxService(
             if (profiles.Add(request.Name, request.Color) is { } profile)
                 logger.LogInformation("Profil „{Name}“ im Launcher angelegt", profile.Name);
         }
+        else if (name.StartsWith(LauncherInbox.EditPrefix, StringComparison.Ordinal))
+        {
+            var edit = JsonSerializer.Deserialize(data, MorniLanJsonContext.Default.ProfileEdit);
+            if (edit is not null && profiles.Edit(edit))
+                logger.LogInformation("Profil {Id} im Launcher angepasst", edit.ProfileId);
+        }
         else if (name.StartsWith(LauncherInbox.HelpPrefix, StringComparison.Ordinal))
         {
             var message = JsonSerializer.Deserialize(data, MorniLanJsonContext.Default.HelpMessage);

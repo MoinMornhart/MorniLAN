@@ -61,6 +61,84 @@ public sealed class ProfileTests : IDisposable
 
     // ───── Profile auf dem PC ─────
 
+    // ───── Personalisierung: Passwort, Thema, Farbe ─────
+
+    [Fact]
+    public void Password_HashVerify_NeverPlaintext()
+    {
+        var hash = ProfilePassword.Hash("geheim1");
+        Assert.StartsWith("pbkdf2$", hash);
+        Assert.DoesNotContain("geheim1", hash);
+        Assert.True(ProfilePassword.Verify("geheim1", hash));
+        Assert.False(ProfilePassword.Verify("falsch", hash));
+        Assert.False(ProfilePassword.Verify("", hash));
+        Assert.True(ProfilePassword.LooksLikeHash(hash));
+        Assert.True(ProfilePassword.LooksLikeHash(null)); // kein Passwort ist ok
+        Assert.False(ProfilePassword.LooksLikeHash("klartext"));
+    }
+
+    [Theory]
+    [InlineData("abc", "Mindestens")]
+    [InlineData("", "Bitte")]
+    [InlineData("1234", null)]
+    public void Password_Validate(string password, string? errorContains)
+    {
+        var error = ProfilePassword.Validate(password);
+        if (errorContains is null)
+            Assert.Null(error);
+        else
+            Assert.Contains(errorContains, error);
+    }
+
+    [Fact]
+    public void Themes_NormalizeToKnown()
+    {
+        Assert.Equal("neon", ProfileThemes.Normalize("neon"));
+        Assert.Equal(ProfileThemes.Custom, ProfileThemes.Normalize("custom"));
+        Assert.Equal(ProfileThemes.Default, ProfileThemes.Normalize("gibtsnicht"));
+        Assert.Equal(ProfileThemes.Default, ProfileThemes.Normalize(null));
+    }
+
+    [Fact]
+    public void ProfileStore_Edit_AppliesColorThemePassword_AndClear()
+    {
+        var store = new AgentProfileStore(_dir.Path);
+        var profile = store.Add("Lena", "#3DDC84")!;
+
+        Assert.True(store.Edit(new LauncherInbox.ProfileEdit(profile.Id, Color: "#FF6B6B", Theme: "neon",
+            PasswordHash: ProfilePassword.Hash("1234"), HasCustomBackground: true, HasAvatar: true)));
+        var edited = store.Current.Single();
+        Assert.Equal("#FF6B6B", edited.Color);
+        Assert.Equal("neon", edited.Theme);
+        Assert.True(edited.HasPassword);
+        Assert.True(edited.HasCustomBackground);
+        Assert.True(edited.HasAvatar);
+
+        // Admin setzt Passwort zurück
+        Assert.True(store.ClearPassword(profile.Id));
+        Assert.False(new AgentProfileStore(_dir.Path).Current.Single().HasPassword);
+
+        // Kaputter Hash über den Briefkasten wird abgelehnt
+        Assert.False(store.Edit(new LauncherInbox.ProfileEdit(profile.Id, PasswordHash: "nicht-pbkdf2")));
+        // Unbekanntes Profil
+        Assert.False(store.Edit(new LauncherInbox.ProfileEdit("profile:weg", Color: "#FF6B6B")));
+    }
+
+    [Fact]
+    public void Inbox_AppliesProfileEdit()
+    {
+        var (inbox, profiles, _, folder) = NewInbox();
+        var profile = profiles.Add("Max", "#4C8DFF")!;
+        LauncherInbox.WriteProfileEdit(folder, new LauncherInbox.ProfileEdit(profile.Id, Theme: "racing",
+            PasswordHash: ProfilePassword.Hash("passwort")));
+
+        inbox.ProcessOnce();
+
+        var edited = profiles.Current.Single();
+        Assert.Equal("racing", edited.Theme);
+        Assert.True(edited.HasPassword);
+    }
+
     [Fact]
     public void ProfileStore_ValidatesNames_NoDuplicates_Limit_AndPersists()
     {
@@ -206,6 +284,17 @@ public sealed class ProfileTests : IDisposable
         Assert.True(gta.IsVisibleFor(Lena.Id));
         Assert.False(gta.IsVisibleFor(Max.Id));
         Assert.Equal(2, list.Profiles!.Length);
+    }
+
+    [Fact]
+    public void Catalog_Hash_ChangesWhenProfilePersonalizationChanges()
+    {
+        var plain = LauncherCatalog.Build(Apps, AppPolicy.Default, _ => null, [Lena]);
+        var themed = LauncherCatalog.Build(Apps, AppPolicy.Default, _ => null, [Lena with { Theme = "neon" }]);
+        var locked = LauncherCatalog.Build(Apps, AppPolicy.Default, _ => null, [Lena with { PasswordHash = "pbkdf2$a$b" }]);
+
+        Assert.NotEqual(plain.Hash, themed.Hash);
+        Assert.NotEqual(plain.Hash, locked.Hash);
     }
 
     [Fact]

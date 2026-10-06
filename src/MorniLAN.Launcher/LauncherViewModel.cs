@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,17 +23,44 @@ public enum LauncherView
     /// <summary>Wer spielt? Profilauswahl beim Start.</summary>
     Profiles,
 
+    /// <summary>Passwortabfrage vor einem geschützten Profil.</summary>
+    Password,
+
     /// <summary>Kacheln.</summary>
     Home,
 }
 
-/// <summary>Eine Profilkachel in der Auswahl.</summary>
-public sealed class ProfileTile(LauncherProfile profile)
+/// <summary>Ein Hintergrund-Thema zur Auswahl.</summary>
+public sealed partial class ThemeChoice(string id, string name, string from, string to) : ObservableObject
 {
-    public LauncherProfile Profile { get; } = profile;
+    public string Id { get; } = id;
+    public string Name { get; } = name;
+    public IBrush Preview { get; } = new LinearGradientBrush
+    {
+        StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+        EndPoint = new Avalonia.RelativePoint(1, 1, Avalonia.RelativeUnit.Relative),
+        GradientStops = { new GradientStop(Color.Parse(from), 0), new GradientStop(Color.Parse(to), 1) },
+    };
+    [ObservableProperty] public partial bool IsSelected { get; set; }
+}
+
+/// <summary>Eine Profilkachel in der Auswahl.</summary>
+public sealed class ProfileTile
+{
+    public ProfileTile(LauncherProfile profile, ProfileMedia media)
+    {
+        Profile = profile;
+        Brush = new SolidColorBrush(Color.Parse(ProfileColors.Normalize(profile.Color)));
+        Avatar = profile.HasAvatar ? media.Load(media.AvatarPath(profile.Id)) : null;
+    }
+
+    public LauncherProfile Profile { get; }
     public string Name => Profile.Name;
     public string Initial => Profile.Name.Length > 0 ? char.ToUpperInvariant(Profile.Name[0]).ToString() : "?";
-    public IBrush Brush { get; } = new SolidColorBrush(Color.Parse(ProfileColors.Normalize(profile.Color)));
+    public IBrush Brush { get; }
+    public Bitmap? Avatar { get; }
+    public bool HasAvatar => Avatar is not null;
+    public bool HasPassword => Profile.HasPassword;
 }
 
 /// <summary>Eine Farbe zur Auswahl beim Anlegen eines Profils.</summary>
@@ -59,6 +87,7 @@ public sealed partial class LauncherViewModel : ObservableObject
         Environment.GetEnvironmentVariable("MORNILAN_INBOX") ?? LauncherInbox.CurrentUserFolder();
 
     private readonly LauncherStore _store = new();
+    private readonly ProfileMedia _media = new();
     private List<LauncherTile> _all = [];
     private string? _appsHash;
     private AgentLocalStatus? _status;
@@ -66,13 +95,17 @@ public sealed partial class LauncherViewModel : ObservableObject
     private bool _chosenThisSession;
     private string? _toast;
     private DateTimeOffset _toastUntil;
+    private ProfileTile? _awaitingPassword;
 
     public LauncherViewModel()
     {
         Colors = [.. ProfileColors.All.Select(c => new ColorChoice(c))];
         Colors[0].IsSelected = true;
+        Themes = [.. ProfileThemes.Gradients.Select(g => new ThemeChoice(g.Id, g.Name, g.From, g.To))];
+        Themes[0].IsSelected = true;
         VersionText = $"MorniLAN {VersionInfo.Display}";
         UpdateClock();
+        ApplyBackground(null);
         LauncherStore.CleanInbox(InboxFolder, TimeSpan.FromMinutes(2));
     }
 
@@ -81,15 +114,24 @@ public sealed partial class LauncherViewModel : ObservableObject
     public ObservableCollection<LauncherTile> Games { get; } = [];
     public ObservableCollection<LauncherTile> Apps { get; } = [];
     public ColorChoice[] Colors { get; }
+    public ThemeChoice[] Themes { get; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsWelcome), nameof(IsPairing), nameof(IsProfiles), nameof(IsHome))]
+    [NotifyPropertyChangedFor(nameof(IsWelcome), nameof(IsPairing), nameof(IsProfiles), nameof(IsPassword), nameof(IsHome))]
     public partial LauncherView View { get; set; } = LauncherView.Welcome;
 
     public bool IsWelcome => View == LauncherView.Welcome;
     public bool IsPairing => View == LauncherView.Pairing;
     public bool IsProfiles => View == LauncherView.Profiles;
+    public bool IsPassword => View == LauncherView.Password;
     public bool IsHome => View == LauncherView.Home;
+
+    /// <summary>Hintergrund des Launchers: Thema-Farbverlauf oder eigenes Bild des aktuellen Profils.</summary>
+    [ObservableProperty] public partial IBrush Background { get; set; } = new SolidColorBrush(Color.Parse("#0F1115"));
+    [ObservableProperty] public partial Bitmap? BackgroundImage { get; set; }
+    public bool HasBackgroundImage => BackgroundImage is not null;
+
+    partial void OnBackgroundImageChanged(Bitmap? value) => OnPropertyChanged(nameof(HasBackgroundImage));
 
     [ObservableProperty] public partial string WelcomeText { get; set; } = "Verbinde mit dem MorniLAN-Dienst …";
     [ObservableProperty] public partial string PairingHint { get; set; } = "";
@@ -122,15 +164,28 @@ public sealed partial class LauncherViewModel : ObservableObject
     [ObservableProperty] public partial bool HasApps { get; set; }
     [ObservableProperty] public partial bool NothingFound { get; set; }
 
+    // Passwortabfrage
+    [ObservableProperty] public partial string PasswordPrompt { get; set; } = "";
+    [ObservableProperty] public partial string PasswordInput { get; set; } = "";
+    [ObservableProperty] public partial string PasswordError { get; set; } = "";
+
     // Dialoge
     [ObservableProperty] public partial bool ShowNewProfile { get; set; }
     [ObservableProperty] public partial string NewProfileName { get; set; } = "";
     [ObservableProperty] public partial string NewProfileError { get; set; } = "";
     [ObservableProperty] public partial bool ShowPower { get; set; }
 
-    public bool HasOverlay => ShowNewProfile || ShowPower;
+    // Profil bearbeiten
+    [ObservableProperty] public partial bool ShowEditProfile { get; set; }
+    [ObservableProperty] public partial string EditTitle { get; set; } = "";
+    [ObservableProperty] public partial string EditPassword { get; set; } = "";
+    [ObservableProperty] public partial bool EditHasPassword { get; set; }
+    [ObservableProperty] public partial string EditMessage { get; set; } = "";
+
+    public bool HasOverlay => ShowNewProfile || ShowPower || ShowEditProfile;
 
     partial void OnShowNewProfileChanged(bool value) => OnPropertyChanged(nameof(HasOverlay));
+    partial void OnShowEditProfileChanged(bool value) => OnPropertyChanged(nameof(HasOverlay));
     partial void OnShowPowerChanged(bool value) => OnPropertyChanged(nameof(HasOverlay));
     partial void OnSearchTextChanged(string value) => ApplyFilter();
 
@@ -209,19 +264,22 @@ public sealed partial class LauncherViewModel : ObservableObject
         var selected = CurrentProfile?.Profile.Id;
         Profiles.Clear();
         foreach (var profile in profiles)
-            Profiles.Add(new ProfileTile(profile));
+            Profiles.Add(new ProfileTile(profile, _media));
         CanCreateProfile = !list.ProfileCreationBlocked && profiles.Length < LauncherProfile.MaxProfiles;
         CanContinueWithoutProfile = profiles.Length == 0;
 
-        // Gerade angelegtes Profil gleich auswählen
+        // Gerade angelegtes Profil gleich auswählen (frisch angelegt hat nie ein Passwort)
         if (_pendingProfileName is { } pending && Profiles.FirstOrDefault(p => p.Name == pending) is { } created)
         {
             _pendingProfileName = null;
-            SelectProfile(created);
+            EnterProfile(created);
             return;
         }
+        // Aktuelles Profil aktualisieren (z. B. frisch angepasst), Hintergrund neu anwenden
         CurrentProfile = Profiles.FirstOrDefault(p => p.Profile.Id == selected);
-        if (CurrentProfile is null && Profiles.Count > 0 && _chosenThisSession)
+        if (CurrentProfile is not null)
+            ApplyBackground(CurrentProfile.Profile);
+        else if (Profiles.Count > 0 && _chosenThisSession)
             _chosenThisSession = false; // ausgewähltes Profil wurde gelöscht: neu wählen
         ApplyFilter();
     }
@@ -267,6 +325,10 @@ public sealed partial class LauncherViewModel : ObservableObject
             { Delivered: false } => "Hilfe wird gesendet …",
             _ => "Hilfe anfordern",
         };
+
+        // Während der Passwortabfrage den Bildschirm nicht wegziehen
+        if (View == LauncherView.Password)
+            return;
 
         var previous = View;
         if (_all.Count == 0 && Profiles.Count == 0)
@@ -318,12 +380,31 @@ public sealed partial class LauncherViewModel : ObservableObject
 
     // ───── Befehle ─────
 
+    /// <summary>Profil anklicken: Hat es ein Passwort, erst danach fragen, sonst gleich öffnen.</summary>
     [RelayCommand]
     private void SelectProfile(ProfileTile? profile)
     {
+        if (profile is { HasPassword: true })
+        {
+            _awaitingPassword = profile;
+            PasswordPrompt = $"Passwort für „{profile.Name}“";
+            PasswordInput = "";
+            PasswordError = "";
+            View = LauncherView.Password;
+            FocusRequested?.Invoke();
+            return;
+        }
+        EnterProfile(profile);
+    }
+
+    /// <summary>Passwort geprüft oder keins nötig: Profil wirklich öffnen.</summary>
+    private void EnterProfile(ProfileTile? profile)
+    {
         CurrentProfile = profile;
+        _awaitingPassword = null;
         _chosenThisSession = true;
         _store.RememberProfile(profile?.Profile.Id);
+        ApplyBackground(profile?.Profile);
         SearchText = "";
         ApplyFilter();
         View = _all.Count == 0 && Profiles.Count == 0 ? LauncherView.Welcome : LauncherView.Home;
@@ -331,7 +412,46 @@ public sealed partial class LauncherViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void ContinueWithoutProfile() => SelectProfile(null);
+    private void ConfirmPassword()
+    {
+        if (_awaitingPassword is not { } profile)
+            return;
+        if (ProfilePassword.Verify(PasswordInput, profile.Profile.PasswordHash))
+        {
+            EnterProfile(profile);
+        }
+        else
+        {
+            PasswordError = "Falsches Passwort.";
+            PasswordInput = "";
+            FocusRequested?.Invoke();
+        }
+    }
+
+    [RelayCommand]
+    private void ContinueWithoutProfile() => EnterProfile(null);
+
+    /// <summary>Hintergrund setzen: eigenes Bild des Profils, sonst der Farbverlauf des Themas.</summary>
+    private void ApplyBackground(LauncherProfile? profile)
+    {
+        BackgroundImage = profile is { HasCustomBackground: true } && _media.HasBackground(profile.Id)
+            ? _media.Load(_media.BackgroundPath(profile.Id))
+            : null;
+        var theme = ProfileThemes.Normalize(profile?.Theme);
+        var gradient = ProfileThemes.Gradients.FirstOrDefault(g => g.Id == theme, ProfileThemes.Gradients[0]);
+        Background = gradient.From == gradient.To
+            ? new SolidColorBrush(Color.Parse(gradient.From))
+            : new LinearGradientBrush
+            {
+                StartPoint = new Avalonia.RelativePoint(0, 0, Avalonia.RelativeUnit.Relative),
+                EndPoint = new Avalonia.RelativePoint(1, 1, Avalonia.RelativeUnit.Relative),
+                GradientStops =
+                {
+                    new GradientStop(Color.Parse(gradient.From), 0),
+                    new GradientStop(Color.Parse(gradient.To), 1),
+                },
+            };
+    }
 
     [RelayCommand]
     private void SwitchProfile()
@@ -390,6 +510,135 @@ public sealed partial class LauncherViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void PickTheme(ThemeChoice choice)
+    {
+        foreach (var theme in Themes)
+            theme.IsSelected = theme == choice;
+    }
+
+    /// <summary>Vom Fenster gesetzt: lässt den Nutzer eine Bilddatei wählen (Dateiauswahl braucht das Fenster).</summary>
+    public Func<Task<string?>>? PickImageFile { get; set; }
+
+    /// <summary>„Mein Profil“ bearbeiten (nur das aktuell gewählte Profil).</summary>
+    [RelayCommand]
+    private void OpenEditProfile()
+    {
+        if (CurrentProfile is not { } profile)
+            return;
+        foreach (var color in Colors)
+            color.IsSelected = string.Equals(color.Hex, profile.Profile.Color, StringComparison.OrdinalIgnoreCase);
+        if (!Colors.Any(c => c.IsSelected))
+            Colors[0].IsSelected = true;
+        var theme = ProfileThemes.Normalize(profile.Profile.Theme);
+        foreach (var t in Themes)
+            t.IsSelected = t.Id == theme;
+        EditTitle = $"„{profile.Name}“ einrichten";
+        EditPassword = "";
+        EditHasPassword = profile.Profile.HasPassword;
+        EditMessage = "";
+        ShowEditProfile = true;
+        FocusRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    private async Task PickBackgroundAsync()
+    {
+        if (CurrentProfile is not { } profile || PickImageFile is null)
+            return;
+        if (await PickImageFile() is { } file && _media.SaveBackground(profile.Profile.Id, file))
+        {
+            SendEdit(profile.Profile.Id, hasBackground: true);
+            EditMessage = "Hintergrundbild gesetzt.";
+        }
+        else if (PickImageFile is not null)
+        {
+            EditMessage = "Das Bild konnte nicht gelesen werden.";
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveBackground()
+    {
+        if (CurrentProfile is not { } profile)
+            return;
+        try { File.Delete(_media.BackgroundPath(profile.Profile.Id)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        SendEdit(profile.Profile.Id, hasBackground: false);
+        BackgroundImage = null;
+        ApplyBackground(profile.Profile with { HasCustomBackground = false });
+        EditMessage = "Hintergrundbild entfernt.";
+    }
+
+    [RelayCommand]
+    private async Task PickAvatarAsync()
+    {
+        if (CurrentProfile is not { } profile || PickImageFile is null)
+            return;
+        if (await PickImageFile() is { } file && _media.SaveAvatar(profile.Profile.Id, file))
+        {
+            SendEdit(profile.Profile.Id, hasAvatar: true);
+            EditMessage = "Profilbild gesetzt.";
+        }
+    }
+
+    [RelayCommand]
+    private void RemoveAvatar()
+    {
+        if (CurrentProfile is not { } profile)
+            return;
+        try { File.Delete(_media.AvatarPath(profile.Profile.Id)); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+        SendEdit(profile.Profile.Id, hasAvatar: false);
+        EditMessage = "Profilbild entfernt.";
+    }
+
+    [RelayCommand]
+    private void SaveEditProfile()
+    {
+        if (CurrentProfile is not { } profile)
+            return;
+        string? passwordHash = null;
+        if (!string.IsNullOrEmpty(EditPassword))
+        {
+            if (ProfilePassword.Validate(EditPassword) is { } error)
+            {
+                EditMessage = error;
+                return;
+            }
+            passwordHash = ProfilePassword.Hash(EditPassword);
+        }
+        SendEdit(profile.Profile.Id, color: Colors.First(c => c.IsSelected).Hex,
+            theme: Themes.First(t => t.IsSelected).Id, passwordHash: passwordHash);
+        ApplyBackground(profile.Profile with { Theme = Themes.First(t => t.IsSelected).Id });
+        ShowEditProfile = false;
+        Toast("Profil wird angepasst …", 5);
+        FocusRequested?.Invoke();
+    }
+
+    [RelayCommand]
+    private void RemovePassword()
+    {
+        if (CurrentProfile is { } profile)
+        {
+            SendEdit(profile.Profile.Id, passwordHash: "");
+            EditHasPassword = false;
+            EditMessage = "Passwort entfernt.";
+        }
+    }
+
+    private void SendEdit(string profileId, string? color = null, string? theme = null, string? passwordHash = null,
+        bool? hasBackground = null, bool? hasAvatar = null)
+    {
+        try
+        {
+            LauncherInbox.WriteProfileEdit(InboxFolder,
+                new LauncherInbox.ProfileEdit(profileId, color, theme, passwordHash, hasBackground, hasAvatar));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            EditMessage = $"Konnte nicht gespeichert werden: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
     private void Launch(LauncherTile tile)
     {
         var error = AppStarter.Start(tile.App.LaunchTarget, tile.App.Arguments);
@@ -442,9 +691,14 @@ public sealed partial class LauncherViewModel : ObservableObject
     [RelayCommand]
     private void Back()
     {
-        if (ShowNewProfile || ShowPower)
+        if (ShowNewProfile || ShowPower || ShowEditProfile)
         {
-            ShowNewProfile = ShowPower = false;
+            ShowNewProfile = ShowPower = ShowEditProfile = false;
+        }
+        else if (View == LauncherView.Password)
+        {
+            _awaitingPassword = null;
+            View = LauncherView.Profiles;
         }
         else if (SearchText.Length > 0)
         {
