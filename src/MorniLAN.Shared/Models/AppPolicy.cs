@@ -51,8 +51,27 @@ public sealed record AppPolicy(
     bool BlockProfileCreation = false,
     string[]? RestrictedAccounts = null,
     string[]? BlockedAreas = null,
-    string[]? KioskAccounts = null)
+    string[]? KioskAccounts = null,
+    string[]? HiddenApps = null)
 {
+    /// <summary>
+    /// Ausgeblendet: taucht weder in der Panel-Liste noch als Launcher-Kachel auf. Rein kosmetisch – das Programm
+    /// bleibt installiert und (sofern freigegeben) startbar. Nutzer-Wunsch 2026-10-06: unnötige Apps aufräumen,
+    /// ohne sie zu sperren. Eigenes, nachträglich ergänztes Feld, damit ältere Daten/Panel es übergehen.
+    /// </summary>
+    public bool IsHidden(string appId) => (HiddenApps ?? []).Contains(appId, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Mehrere Einträge auf einmal aus-/wieder einblenden.</summary>
+    public AppPolicy WithHidden(IEnumerable<string> appIds, bool hidden, DateTimeOffset now)
+    {
+        var ids = appIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return Next(now) with
+        {
+            HiddenApps = [.. (HiddenApps ?? []).Where(id => !ids.Contains(id)),
+                .. hidden ? ids : Enumerable.Empty<string>()],
+        };
+    }
+
     /// <summary>Wird dieses Windows-Konto eingeschränkt? (SID; Administratorkonten prüft der Agent zusätzlich.)</summary>
     public bool IsRestricted(string sid) => (RestrictedAccounts ?? []).Contains(sid, StringComparer.OrdinalIgnoreCase);
 

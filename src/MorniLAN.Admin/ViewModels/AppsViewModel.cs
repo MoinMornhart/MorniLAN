@@ -137,7 +137,7 @@ public sealed partial class AppItemViewModel : ObservableObject
     private readonly Action<AppItemViewModel, bool> _setAllowed;
     private bool _syncing;
 
-    public AppItemViewModel(AppEntry app, InventoryStore store, bool allowed, Action<AppItemViewModel, bool> setAllowed)
+    public AppItemViewModel(AppEntry app, InventoryStore store, bool allowed, bool hidden, Action<AppItemViewModel, bool> setAllowed)
     {
         App = app;
         Icon = Load(store.ImagePath(app.IconHash));
@@ -145,6 +145,7 @@ public sealed partial class AppItemViewModel : ObservableObject
         _setAllowed = setAllowed;
         _syncing = true;
         IsAllowed = allowed;
+        IsHidden = hidden;
         _syncing = false;
     }
 
@@ -161,6 +162,11 @@ public sealed partial class AppItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(Opacity), nameof(StateText))]
     public partial bool IsAllowed { get; set; }
 
+    /// <summary>Ausgeblendet: nicht in Launcher/Liste, aber nicht gesperrt (nur Aufräumen).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Opacity), nameof(StateText), nameof(HideButtonText))]
+    public partial bool IsHidden { get; set; }
+
     partial void OnIsAllowedChanged(bool value)
     {
         if (!_syncing)
@@ -168,15 +174,17 @@ public sealed partial class AppItemViewModel : ObservableObject
     }
 
     /// <summary>Stand von außen übernehmen, ohne erneut zu speichern.</summary>
-    internal void Sync(bool allowed)
+    internal void Sync(bool allowed, bool hidden)
     {
         _syncing = true;
         IsAllowed = allowed;
+        IsHidden = hidden;
         _syncing = false;
     }
 
-    public double Opacity => App.IsSystemComponent || !IsAllowed ? 0.55 : 1.0;
-    public string StateText => IsAllowed ? "freigegeben" : "gesperrt";
+    public double Opacity => App.IsSystemComponent || IsHidden || !IsAllowed ? 0.55 : 1.0;
+    public string StateText => IsHidden ? "ausgeblendet" : IsAllowed ? "freigegeben" : "gesperrt";
+    public string HideButtonText => IsHidden ? "Einblenden" : "Ausblenden";
 
     public string Badge => App.Launcher ?? App.Source switch
     {
@@ -228,6 +236,17 @@ public enum AppFilter
     Blocked,
 }
 
+/// <summary>Ein Vorschlag „diesen Eintrag ausblenden“ mit Haken (vorausgewählt).</summary>
+public sealed partial class SuggestionRowViewModel(AppEntry app, string reason) : ObservableObject
+{
+    public AppEntry App { get; } = app;
+    public string Name => App.Name;
+    public string Reason { get; } = reason;
+    public string Details => string.IsNullOrWhiteSpace(App.Publisher) ? Reason : $"{Reason} · {App.Publisher}";
+
+    [ObservableProperty] public partial bool IsChecked { get; set; } = true;
+}
+
 /// <summary>Seite „Freigaben“: was auf dem PC installiert ist und was davon freigegeben ist.</summary>
 public sealed partial class AppsViewModel : ObservableObject
 {
@@ -244,6 +263,7 @@ public sealed partial class AppsViewModel : ObservableObject
     public ObservableCollection<DeviceChoice> Devices { get; } = [];
     public ObservableCollection<AppItemViewModel> Games { get; } = [];
     public ObservableCollection<AppItemViewModel> Apps { get; } = [];
+    public ObservableCollection<SuggestionRowViewModel> Suggestions { get; } = [];
     public ObservableCollection<ScopeChoice> Scopes { get; } = [];
     public ObservableCollection<ProfileRowViewModel> ProfileRows { get; } = [];
     public ObservableCollection<AccountRowViewModel> Accounts { get; } = [];
@@ -460,6 +480,17 @@ public sealed partial class AppsViewModel : ObservableObject
     [ObservableProperty] public partial bool IsEmpty { get; set; } = true;
     [ObservableProperty] public partial string RefreshMessage { get; set; } = "";
 
+    // Aufräumen: unnötige Apps erkennen und auf Bestätigung ausblenden (Nutzer-Wunsch 2026-10-06)
+    [ObservableProperty] public partial bool HasSuggestions { get; set; }
+    [ObservableProperty] public partial string SuggestionSummary { get; set; } = "";
+    [ObservableProperty] public partial bool ShowSuggestions { get; set; }
+    [ObservableProperty] public partial bool ShowHidden { get; set; }
+    [ObservableProperty] public partial int HiddenCount { get; set; }
+    [ObservableProperty] public partial bool HasHidden { get; set; }
+    [ObservableProperty] public partial string CleanupMessage { get; set; } = "";
+
+    partial void OnShowHiddenChanged(bool value) => ApplyFilter();
+
     /// <summary>Kommt der eingestellte Stand auf dem PC an?</summary>
     [ObservableProperty] public partial string PolicyStatus { get; set; } = "";
     [ObservableProperty] public partial IBrush PolicyBrush { get; set; } = DeviceViewModel.OfflineBrush;
@@ -501,7 +532,8 @@ public sealed partial class AppsViewModel : ObservableObject
             return;
         var policy = server.Policies.Get(deviceId);
         foreach (var item in _all)
-            item.Sync(policy.IsAllowed(item.App.Id, ScopeProfileId));
+            item.Sync(policy.IsAllowed(item.App.Id, ScopeProfileId), policy.IsHidden(item.App.Id));
+        RebuildCleanup(policy);
         // Konten- und Bereich-Schalter an den neuen Stand angleichen
         _syncingRestrictions = true;
         foreach (var account in Accounts)
@@ -570,7 +602,9 @@ public sealed partial class AppsViewModel : ObservableObject
         foreach (var custom in policy.CustomApps.Where(c => apps.All(a => a.Id != c.Id)))
             apps.Add(new AppEntry(custom.Id, custom.Name, AppSource.Custom, ExecutablePath: custom.ExecutablePath,
                 LaunchArguments: custom.Arguments));
-        _all = apps.Select(a => new AppItemViewModel(a, server.Inventory, policy.IsAllowed(a.Id, ScopeProfileId), SetAllowed)).ToList();
+        _all = apps.Select(a => new AppItemViewModel(a, server.Inventory, policy.IsAllowed(a.Id, ScopeProfileId),
+            policy.IsHidden(a.Id), SetAllowed)).ToList();
+        RebuildCleanup(policy);
         _collectedAt = report?.CollectedAt;
         EmptyText = report is null
             ? $"„{device.Name}“ hat noch keine Programmliste geschickt. Ist der PC online? Sonst auf „Neu einlesen“ klicken."
@@ -584,7 +618,8 @@ public sealed partial class AppsViewModel : ObservableObject
         var filter = (AppFilter)Math.Clamp(FilterIndex, 0, 4);
         var search = SearchText.Trim();
         _visible = _all.Where(i =>
-                (ShowSystem || !i.App.IsSystemComponent || filter == AppFilter.Blocked)
+                (ShowHidden || !i.IsHidden || filter == AppFilter.Blocked)
+                && (ShowSystem || !i.App.IsSystemComponent || filter == AppFilter.Blocked)
                 && (search.Length == 0 || i.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)
                                        || (i.App.Publisher?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false))
                 && filter switch
@@ -613,6 +648,73 @@ public sealed partial class AppsViewModel : ObservableObject
               (blocked > 0 ? $" · {blocked} gesperrt" : " · alles freigegeben") +
               (ShowSystem || hiddenSystem == 0 ? "" : $" · {hiddenSystem} Systemkomponenten ausgeblendet") +
               (_collectedAt is { } at ? $" · Stand {at.ToLocalTime():dd.MM. HH:mm} Uhr" : "");
+    }
+
+    /// <summary>Vorschläge zum Ausblenden und Anzahl bereits ausgeblendeter Einträge neu bestimmen.</summary>
+    private void RebuildCleanup(AppPolicy policy)
+    {
+        HiddenCount = _all.Count(i => i.IsHidden);
+        HasHidden = HiddenCount > 0;
+        // Vorschlagen: noch nicht ausgeblendet, keine Systemkomponente (die sind eh ausgeblendet), und als unnötig erkannt
+        var suggestions = _all
+            .Where(i => !i.IsHidden && !i.App.IsSystemComponent && AppNoise.Classify(i.App) is not null)
+            .Select(i => new SuggestionRowViewModel(i.App, AppNoise.Classify(i.App)!))
+            .OrderBy(s => s.Reason, StringComparer.Ordinal)
+            .ThenBy(s => s.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        Suggestions.Clear();
+        foreach (var s in suggestions)
+            Suggestions.Add(s);
+        HasSuggestions = suggestions.Count > 0;
+        SuggestionSummary = suggestions.Count switch
+        {
+            0 => "Nichts zum Aufräumen gefunden – die Liste ist schon sauber.",
+            1 => "1 Eintrag sieht unnötig aus (Laufzeit, Treiber, Zubehör …).",
+            _ => $"{suggestions.Count} Einträge sehen unnötig aus (Laufzeiten, Treiber, Zubehör …).",
+        };
+        if (!HasSuggestions)
+            ShowSuggestions = false;
+    }
+
+    [RelayCommand]
+    private void ToggleSuggestions() => ShowSuggestions = !ShowSuggestions;
+
+    /// <summary>Alle Haken setzen/entfernen (Sammel-Auswahl).</summary>
+    [RelayCommand]
+    private void SelectAllSuggestions()
+    {
+        var anyUnchecked = Suggestions.Any(s => !s.IsChecked);
+        foreach (var s in Suggestions)
+            s.IsChecked = anyUnchecked;
+    }
+
+    /// <summary>Die angehakten Vorschläge ausblenden (eine Sammel-Bestätigung).</summary>
+    [RelayCommand]
+    private void HideSelected()
+    {
+        var ids = Suggestions.Where(s => s.IsChecked).Select(s => s.App.Id).ToList();
+        if (ids.Count == 0)
+        {
+            CleanupMessage = "Nichts ausgewählt.";
+            return;
+        }
+        ChangePolicy((p, now) => p.WithHidden(ids, true, now), reload: true);
+        CleanupMessage = $"{ids.Count} Eintrag/Einträge ausgeblendet. (Rückgängig: „Ausgeblendete anzeigen“.)";
+        ShowSuggestions = false;
+    }
+
+    /// <summary>Einzelnen Eintrag aus-/wieder einblenden (Knopf an der Kachel).</summary>
+    [RelayCommand]
+    private void ToggleHidden(AppItemViewModel item) =>
+        ChangePolicy((p, now) => p.WithHidden([item.App.Id], !item.IsHidden, now), reload: true);
+
+    /// <summary>Alle wieder einblenden.</summary>
+    [RelayCommand]
+    private void UnhideAll()
+    {
+        var ids = _all.Where(i => i.IsHidden).Select(i => i.App.Id).ToList();
+        if (ids.Count > 0)
+            ChangePolicy((p, now) => p.WithHidden(ids, false, now), reload: true);
     }
 
     private void UpdatePolicyStatus()
