@@ -63,6 +63,20 @@
       <Image Source="{Binding BackgroundImage}" IsVisible="{Binding HasBackgroundImage}" Stretch="UniformToFill" />
       <Panel IsVisible="{Binding HasBackgroundImage}" Background="#99000000" />
 
+      <!-- Fernzugriff: immer deutlich sichtbar, ganz oben -->
+      <Border IsVisible="{Binding ShowRemoteBanner}" VerticalAlignment="Top" Background="#C8463D" Padding="20,12"
+              ZIndex="50">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+          <TextBlock Text="●" FontSize="16" Foreground="White" VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1" Text="{Binding RemoteBanner}" Margin="12,0" FontSize="16" FontWeight="SemiBold"
+                     Foreground="White" VerticalAlignment="Center" TextWrapping="Wrap" />
+          <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="10" IsVisible="{Binding RemoteAsking}">
+            <Button Content="Ablehnen" Command="{Binding DenyRemoteCommand}" />
+            <Button Content="Erlauben" Classes="accent" Command="{Binding AllowRemoteCommand}" />
+          </StackPanel>
+        </Grid>
+      </Border>
+
       <!-- Begrüßung / Hinweis -->
       <StackPanel IsVisible="{Binding IsWelcome}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
         <TextBlock Text="MorniLAN" FontSize="56" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#E8EAF0" />

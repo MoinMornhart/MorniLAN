@@ -150,5 +150,11 @@ public sealed class PairingCoordinatorTests : IDisposable
         public Task OnApplyRestrictions() => Task.CompletedTask;
 
         public Task OnResetProfilePassword(string profileId) => Task.CompletedTask;
+
+        public Task OnStartRemote(bool allowWithoutConsent) => Task.CompletedTask;
+
+        public Task OnStopRemote() => Task.CompletedTask;
+
+        public Task OnSetInputLock(bool locked) => Task.CompletedTask;
     }
 }

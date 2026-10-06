@@ -29,7 +29,8 @@ public sealed record AgentLocalStatus(
     string AgentVersion,
     DateTimeOffset Timestamp,
     string? AppsHash = null,
-    HelpState? Help = null);
+    HelpState? Help = null,
+    RemoteSessionState? Remote = null);
 
 /// <summary>Stand der letzten Hilfe-Anfrage aus dem Launcher.</summary>
 /// <param name="Delivered">Beim Admin angekommen (sonst wartet sie, bis das Panel erreichbar ist).</param>

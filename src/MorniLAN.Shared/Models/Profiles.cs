@@ -153,6 +153,7 @@ public static class LauncherInbox
     public const string ProfilePrefix = "profile-";
     public const string EditPrefix = "edit-";
     public const string HelpPrefix = "help-";
+    public const string RemotePrefix = "remote-";
 
     /// <summary>Ordner unterhalb des Benutzerprofils (z. B. C:\Users\Freund).</summary>
     public static string FolderFor(string userProfileDirectory) =>
@@ -186,6 +187,12 @@ public static class LauncherInbox
 
     public static void WriteHelpRequest(string folder, HelpMessage message) =>
         Write(folder, HelpPrefix, JsonSerializer.SerializeToUtf8Bytes(message, MorniLanJsonContext.Default.HelpMessage));
+
+    /// <summary>Antwort des Freundes auf die Fernzugriffs-Anfrage (erlauben/ablehnen).</summary>
+    public sealed record RemoteConsent(bool Allow);
+
+    public static void WriteRemoteConsent(string folder, RemoteConsent consent) =>
+        Write(folder, RemotePrefix, JsonSerializer.SerializeToUtf8Bytes(consent, MorniLanJsonContext.Default.RemoteConsent));
 
     private static void Write(string folder, string prefix, byte[] data)
     {

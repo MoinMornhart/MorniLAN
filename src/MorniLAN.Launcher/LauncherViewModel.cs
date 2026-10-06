@@ -147,6 +147,22 @@ public sealed partial class LauncherViewModel : ObservableObject
     [ObservableProperty] public partial bool HasAudio { get; set; }
     [ObservableProperty] public partial string HelpText { get; set; } = "Hilfe anfordern";
 
+    // Fernzugriff – immer deutlich sichtbar
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowRemoteBanner))]
+    public partial bool RemoteActive { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowRemoteBanner))]
+    public partial bool RemoteAsking { get; set; }
+
+    [ObservableProperty] public partial bool InputLocked { get; set; }
+    [ObservableProperty] public partial string RemoteBanner { get; set; } = "";
+    public bool ShowRemoteBanner => RemoteActive || RemoteAsking;
+
+    /// <summary>Die Eingabesperre (vom Fenster gesetzt), damit Maus/Tastatur wirklich blockiert werden.</summary>
+    public Action<bool>? SetInputLock { get; set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ProfileName), nameof(ProfileInitial), nameof(ProfileBrush), nameof(HasProfile))]
     public partial ProfileTile? CurrentProfile { get; set; }
@@ -326,6 +342,8 @@ public sealed partial class LauncherViewModel : ObservableObject
             _ => "Hilfe anfordern",
         };
 
+        ShowRemote(status.Remote ?? RemoteSessionState.Idle);
+
         // Während der Passwortabfrage den Bildschirm nicht wegziehen
         if (View == LauncherView.Password)
             return;
@@ -348,6 +366,37 @@ public sealed partial class LauncherViewModel : ObservableObject
         }
         if (View != previous)
             FocusRequested?.Invoke();
+    }
+
+    private void ShowRemote(RemoteSessionState remote)
+    {
+        RemoteAsking = remote.Phase == RemoteSessionPhase.WaitingForConsent;
+        RemoteActive = remote.Phase == RemoteSessionPhase.Active;
+        RemoteBanner = remote.Phase switch
+        {
+            RemoteSessionPhase.WaitingForConsent => "Der Admin möchte auf diesen PC zugreifen.",
+            RemoteSessionPhase.Active when remote.InputLocked => "Fernzugriff läuft – Maus und Tastatur sind gerade gesperrt.",
+            RemoteSessionPhase.Active => "Fernzugriff durch den Admin läuft.",
+            _ => "",
+        };
+        if (InputLocked != remote.InputLocked)
+        {
+            InputLocked = remote.InputLocked;
+            SetInputLock?.Invoke(remote.InputLocked && remote.Phase == RemoteSessionPhase.Active);
+        }
+    }
+
+    [RelayCommand]
+    private void AllowRemote() => SendConsent(true);
+
+    [RelayCommand]
+    private void DenyRemote() => SendConsent(false);
+
+    private void SendConsent(bool allow)
+    {
+        try { LauncherInbox.WriteRemoteConsent(InboxFolder, new LauncherInbox.RemoteConsent(allow)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        RemoteAsking = false;
     }
 
     private void ApplyFilter()

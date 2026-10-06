@@ -46,15 +46,25 @@ public class InventoryLiveTests
         var profiles = new MorniLAN.Agent.Policy.AgentProfileStore(dir.FullName);
         var previewUser = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_USER")
                           ?? Path.Combine(Path.GetTempPath(), "mornilan-preview-user");
+        // Fernzugriff (M7): MORNILAN_PREVIEW_REMOTE=ask zeigt die Erlauben-Abfrage, =active den aktiven Balken
+        var remote = new MorniLAN.Agent.Remote.RemoteAccessService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Remote.RemoteAccessService>.Instance,
+            ensureSunshine: () => true, sunshineInstalled: () => true, hostAddress: () => "192.168.178.109:47989");
+        switch (Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_REMOTE"))
+        {
+            case "ask": remote.Start(allowWithoutConsent: false); break;
+            case "active": remote.Start(allowWithoutConsent: true); break;
+        }
         var inbox = new MorniLAN.Agent.Policy.LauncherInboxService(profiles, policy,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Policy.LauncherInboxService>.Instance, () => [previewUser]);
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Policy.LauncherInboxService>.Instance,
+            () => [previewUser], remote: remote);
         await inbox.StartAsync(ct);
         var catalog = new MorniLAN.Agent.Policy.LauncherCatalog(inventory, policy, profiles);
 
         var log = Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.LocalStatusServer>.Instance;
         using var status = new MorniLAN.Agent.Connection.LocalStatusServer(() => MorniLAN.Shared.Connection.LocalStatusPipe.Serialize(
             new MorniLAN.Shared.Connection.AgentLocalStatus(MorniLAN.Shared.Connection.AgentLinkState.Online, null, "Vorschau-Panel",
-                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash, inbox.Help)), log, "MorniLAN.Preview",
+                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash, inbox.Help, remote.State)), log, "MorniLAN.Preview",
             grantCurrentUser: true);
         using var apps = new MorniLAN.Agent.Connection.LocalStatusServer(
             () => MorniLAN.Shared.Connection.LauncherAppsPipe.Serialize(catalog.Current()), log, "MorniLAN.Preview.Apps",

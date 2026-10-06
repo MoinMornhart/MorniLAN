@@ -94,7 +94,7 @@ Ausführliche Anleitung mit Fehlersuche: [docs/einrichtung.md](docs/einrichtung.
 | 🖥️ | **Launcher wie eine Konsole:** startet bei der Anmeldung im Vollbild, „Wer spielt?“ mit Profilen, Suche, „Zuletzt gespielt“, Leiste mit Uhr, Ton und WLAN, Bedienung auch mit dem Controller | ✅ in der Beta |
 | 🎨 | **Profile gestalten:** jeder richtet sein Profil selbst ein – Farbe, Gaming-Hintergrund, eigenes Bild, Avatar, und ein optionales Passwort für die Profilauswahl | ✅ in der Beta |
 | 🔒 | **Windows-Sperren:** je Konto wählen, ob es eingeschränkt wird (Admin-Konten nie); Einstellungen, Konsole, Registry, Task-Manager und Installieren sperrbar, mit Notfall-Entsperrung am PC | ✅ in der Beta |
-| 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen, über Sunshine und Moonlight | 🔜 geplant |
+| 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen (Sunshine + Moonlight). Immer sichtbar am PC, mit Erlauben/Ablehnen und Maus/Tastatur-Sperre | ✅ Steuerung in der Beta |
 | 🙋 | **Hilfe anfordern:** ein Knopf im Launcher, du bekommst sofort einen Hinweis im Panel | ✅ in der Beta |
 
 ### Updates
@@ -126,7 +126,7 @@ dem Start über seine Prüfsumme (SHA-256) geprüft.
 - [x] 4. Freigaben (Schalter je PC, eigene Einträge, einfache Kacheln im Launcher)
 - [x] 5. Launcher im Vollbild mit Profilen, Controller und Hilfe-Knopf
 - [x] 6. Windows-Sperren je Konto und Notfall-Entsperrung (App Control folgt mit Prüfmodus)
-- [ ] 7. Fernzugriff (Sunshine/Moonlight)
+- [x] 7. Fernzugriff: Steuerung, Anzeige am PC, Eingabesperre (Streaming-Test zu zweit steht aus)
 - [ ] 8. Aktionen (winget, Nachrichten, Neustart, Hilfe anfordern)
 - [ ] 9. Updates mit Rückfall auf die alte Version
 - [ ] 10. Einrichtungsassistent: PC einschalten, Profil wählen, los

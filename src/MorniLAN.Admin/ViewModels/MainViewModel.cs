@@ -18,6 +18,7 @@ public sealed record AddressItem(string Kind, string Address);
 public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private const int AppsPage = 1;
+    private const int RemotePage = 2;
     private const int DiagnosticsPage = 4;
     private const int SettingsPage = 5;
 
@@ -44,6 +45,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         _updateTimer.Tick += async (_, _) => await CheckForUpdatesAsync();
         Diagnostics = new DiagnosticsViewModel(() => _server);
         Apps = new AppsViewModel(() => _server);
+        Remote = new RemoteViewModel(() => _server);
         StartWithWindows = Autostart.IsEnabled();
         KeepRunningInTray = _settings.KeepRunningInTray;
     }
@@ -61,19 +63,21 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public ObservableCollection<AddressItem> Addresses { get; } = [];
     public DiagnosticsViewModel Diagnostics { get; }
     public AppsViewModel Apps { get; }
+    public RemoteViewModel Remote { get; }
 
     // --- Navigation ---------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsOverview), nameof(IsApps), nameof(IsDiagnostics), nameof(IsSettings), nameof(IsPlaceholder),
+    [NotifyPropertyChangedFor(nameof(IsOverview), nameof(IsApps), nameof(IsRemote), nameof(IsDiagnostics), nameof(IsSettings), nameof(IsPlaceholder),
         nameof(PageTitle), nameof(PagePlaceholder))]
     public partial int SelectedNavIndex { get; set; }
 
     public bool IsOverview => SelectedNavIndex <= 0;
     public bool IsApps => SelectedNavIndex == AppsPage;
+    public bool IsRemote => SelectedNavIndex == RemotePage;
     public bool IsDiagnostics => SelectedNavIndex == DiagnosticsPage;
     public bool IsSettings => SelectedNavIndex == SettingsPage;
-    public bool IsPlaceholder => !IsOverview && !IsApps && !IsDiagnostics && !IsSettings;
+    public bool IsPlaceholder => !IsOverview && !IsApps && !IsRemote && !IsDiagnostics && !IsSettings;
     public string PageTitle => Pages[Math.Clamp(SelectedNavIndex, 0, Pages.Length - 1)];
     public string PagePlaceholder => Placeholders[Math.Clamp(SelectedNavIndex, 0, Placeholders.Length - 1)];
 
@@ -105,6 +109,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Policies.Changed += OnPolicyChanged;
             server.Profiles.Changed += OnProfilesChanged;
             server.Accounts.Changed += OnAccountsChanged;
+            server.Remote.Changed += OnRemoteChanged;
             server.Help.Changed += OnHelpChanged;
             ServerStatus =$"Bereit – wartet auf PCs (Port {server.Port})";
             ServerDetails = $"Name im Netzwerk {server.Identity.Name} · Zertifikat {CertificateFingerprint.Short(server.Identity.Fingerprint)}";
@@ -289,6 +294,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnAccountsChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.AccountsChanged(deviceId));
 
+    private void OnRemoteChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Remote.RemoteChanged(deviceId));
+
     /// <summary>Offene Hilfe-Anfragen (Banner auf der Übersicht). Eine neue holt das Fenster nach vorne.</summary>
     public ObservableCollection<HelpNoticeViewModel> HelpNotices { get; } = [];
 
@@ -332,6 +339,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
         HasNoDevices = Devices.Count == 0;
         Apps.SyncDevices();
+        Remote.SyncDevices();
     }
 
     /// <summary>Liste abgleichen statt neu aufbauen, damit Eingaben (Code-Feld) erhalten bleiben.</summary>
@@ -368,6 +376,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Policies.Changed -= OnPolicyChanged;
             server.Profiles.Changed -= OnProfilesChanged;
             server.Accounts.Changed -= OnAccountsChanged;
+            server.Remote.Changed -= OnRemoteChanged;
             server.Help.Changed -= OnHelpChanged;
             await server.DisposeAsync();
         }

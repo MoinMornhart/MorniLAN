@@ -21,7 +21,8 @@ internal sealed class LauncherInboxService(
     AgentPolicyStore policy,
     ILogger<LauncherInboxService> logger,
     Func<IEnumerable<string>>? userFolders = null,
-    TimeProvider? time = null) : BackgroundService
+    TimeProvider? time = null,
+    Remote.RemoteAccessService? remote = null) : BackgroundService
 {
     internal static readonly TimeSpan HelpCooldown = TimeSpan.FromMinutes(1);
     internal static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(60);
@@ -75,7 +76,7 @@ internal sealed class LauncherInboxService(
         {
             do
             {
-                try { ProcessOnce(); }
+                try { ProcessOnce(); remote?.Tick(); }
                 catch (Exception ex) when (ex is not OperationCanceledException)
                 {
                     logger.LogWarning("Briefkasten des Launchers: {Error}", ex.Message);
@@ -155,6 +156,12 @@ internal sealed class LauncherInboxService(
             var edit = JsonSerializer.Deserialize(data, MorniLanJsonContext.Default.ProfileEdit);
             if (edit is not null && profiles.Edit(edit))
                 logger.LogInformation("Profil {Id} im Launcher angepasst", edit.ProfileId);
+        }
+        else if (name.StartsWith(LauncherInbox.RemotePrefix, StringComparison.Ordinal))
+        {
+            var consent = JsonSerializer.Deserialize(data, MorniLanJsonContext.Default.RemoteConsent);
+            if (consent is not null)
+                remote?.Consent(consent.Allow);
         }
         else if (name.StartsWith(LauncherInbox.HelpPrefix, StringComparison.Ordinal))
         {
