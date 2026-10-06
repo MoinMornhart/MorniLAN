@@ -74,6 +74,8 @@ public sealed partial class DeviceViewModel(Guid deviceId, Func<Guid, Task> unpa
             UpdatePhase.Downloading or UpdatePhase.Installing or UpdatePhase.Checking => (state.Message, AccentBrush),
             UpdatePhase.WaitingForGame => (state.Message, WarnBrush),
             UpdatePhase.Failed => (state.Message, ErrorBrush),
+            // Erfolgsmeldung nach einem Update (der Agent markiert sie mit „✓"): kurz grün zeigen
+            UpdatePhase.UpToDate when state.Message.StartsWith('✓') => (state.Message, OnlineBrush),
             _ when availableUpdate is not null => ($"Update auf v{availableUpdate} verfügbar", AccentBrush),
             _ => ("", OfflineBrush),
         };

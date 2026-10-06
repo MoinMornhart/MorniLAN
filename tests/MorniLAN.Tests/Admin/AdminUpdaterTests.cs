@@ -9,11 +9,24 @@ public class AdminUpdaterTests
     [Fact]
     public void LaunchScript_QuotesPathsWithApostrophes()
     {
-        var script = AdminUpdater.LaunchScript(1234, @"C:\Users\O'Brien\setup.exe", @"C:\Users\O'Brien\log.txt");
+        var script = AdminUpdater.LaunchScript(1234, @"C:\Users\O'Brien\setup.exe", @"C:\Users\O'Brien\log.txt",
+            @"C:\Users\O'Brien\MorniLAN.Admin.exe");
 
         Assert.StartsWith("Wait-Process -Id 1234 ", script);
         Assert.Contains(@"-FilePath 'C:\Users\O''Brien\setup.exe'", script);
         Assert.Contains(@"/LOG=""C:\Users\O''Brien\log.txt""", script);
+    }
+
+    [Fact]
+    public void LaunchScript_RestartsPanel_IfNoneRunningAfterSetup()
+    {
+        var script = AdminUpdater.LaunchScript(1, @"C:\s.exe", @"C:\l.txt", @"C:\App\MorniLAN.Admin.exe");
+
+        // Das Setup wird abgewartet …
+        Assert.Contains("-Wait -FilePath 'C:\\s.exe'", script);
+        // … und wenn danach kein Panel läuft, wird die vorhandene Panel-Exe selbst gestartet (Selbstheilung)
+        Assert.Contains("Get-Process -Name 'MorniLAN.Admin'", script);
+        Assert.Contains(@"Start-Process -FilePath 'C:\App\MorniLAN.Admin.exe'", script);
     }
 
     /// <summary>
@@ -36,7 +49,9 @@ public class AdminUpdaterTests
             using var panel = Process.Start(new ProcessStartInfo("powershell.exe", "-NoProfile -Command Start-Sleep 4")
                 { UseShellExecute = false, CreateNoWindow = true })!;
 
-            var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(AdminUpdater.LaunchScript(panel.Id, setup, log)));
+            // Panel-Exe absichtlich nicht vorhanden: Selbstheilung findet nichts und startet nichts nach
+            var panelExe = Path.Combine(dir.FullName, "MorniLAN.Admin.exe");
+            var encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(AdminUpdater.LaunchScript(panel.Id, setup, log, panelExe)));
             using var launcher = Process.Start(new ProcessStartInfo("powershell.exe",
                 $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}")
                 { UseShellExecute = false, CreateNoWindow = true })!;
