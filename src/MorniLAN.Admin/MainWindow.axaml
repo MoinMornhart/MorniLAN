@@ -768,12 +768,6 @@
           </Border>
         </StackPanel>
 
-        <!-- Noch nicht umgesetzte Bereiche -->
-        <StackPanel Spacing="8" IsVisible="{Binding IsPlaceholder}">
-          <TextBlock Text="{Binding PageTitle}" FontSize="28" FontWeight="SemiBold" />
-          <TextBlock Text="{Binding PagePlaceholder}" Classes="muted" />
-        </StackPanel>
-
       </Panel>
     </ScrollViewer>
 

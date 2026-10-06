@@ -209,6 +209,7 @@ public sealed class ProfileTests : IDisposable
     [InlineData("admin-pc", null)]
     [InlineData("admin-pc.tail1234.ts.net", null)]
     [InlineData("", "Adresse")]
+    [InlineData("192.168.1.50:8080", "Port")]
     [InlineData("hat leerzeichen auch", "ungültige")]
     [InlineData("has/slash", "ungültige")]
     public void ConnectionRequest_Validate(string host, string? errorContains)

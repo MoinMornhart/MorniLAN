@@ -34,11 +34,22 @@ internal static class ReleaseCache
         try
         {
             Directory.CreateDirectory(directory);
-            File.WriteAllText(FilePath(directory), etag + "\n" + body);
+            // Atomar: erst in .tmp, dann verschieben – ein Absturz hinterlässt sonst eine halbe Datei, deren ETag
+            // weiter passt (304) und die beim Parsen ewig wirft.
+            var path = FilePath(directory);
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, etag + "\n" + body);
+            File.Move(temp, path, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             // Cache ist nur Beschleunigung – ohne ihn wird einfach jedes Mal frisch geladen
         }
+    }
+
+    public static void Delete(string directory)
+    {
+        try { File.Delete(FilePath(directory)); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 }

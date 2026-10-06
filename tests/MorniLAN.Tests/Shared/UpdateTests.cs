@@ -173,4 +173,21 @@ public class GitHubReleasesTests
         var releases = await GitHubReleases.FetchAsync(http, ct, cacheDirectory: null);
         Assert.Equal(2, releases.Count);
     }
+
+    [Fact]
+    public async Task Fetch_WithCorruptCache_DiscardsIt_AndFetchesFresh()
+    {
+        using var dir = new TempDirectory();
+        var ct = TestContext.Current.CancellationToken;
+        // Kaputter Cache: gültige ETag-Zeile, abgeschnittener JSON-Rumpf
+        await File.WriteAllTextAsync(Path.Combine(dir.Path, "releases-cache.json"), "\"etag-1\"\n[ { \"tag_name\":", ct);
+        // Weil der Cache verworfen wird, darf KEIN If-None-Match geschickt werden, und 200 liefert frisch
+        var handler = new StubHandler(new Queue<HttpResponseMessage>([Ok(ApiResponse, "\"etag-2\"")]));
+        using var http = new HttpClient(handler);
+
+        var releases = await GitHubReleases.FetchAsync(http, ct, dir.Path);
+
+        Assert.Equal(["v0.3.0-beta.1", "v0.2.0"], releases.Select(r => r.Tag));
+        Assert.Null(handler.SentIfNoneMatch[0]); // korrupter Cache verworfen → ohne ETag neu geladen
+    }
 }

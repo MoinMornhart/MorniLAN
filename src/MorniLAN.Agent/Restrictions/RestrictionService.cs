@@ -37,6 +37,8 @@ internal sealed class RestrictionService(
     private readonly Action _resume = resume ?? (() => { });
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly Lock _lock = new();
+    // Serialisiert das Anwenden (Richtlinien + Shell): parallele reg-load desselben Hives schlügen sonst fehl.
+    private readonly Lock _applyGate = new();
 
     private IReadOnlyList<LocalAccount> _accounts = [];
     private RestrictionState _state = RestrictionState.Idle;
@@ -113,6 +115,13 @@ internal sealed class RestrictionService(
 
     /// <summary>Richtlinien aller Konten setzen bzw. entfernen, je nach aktueller Freigabe.</summary>
     private void ApplyPolicies()
+    {
+        // Nur ein Anwenden gleichzeitig (Start, Policy-Änderung und ApplyNow können zusammentreffen).
+        lock (_applyGate)
+            ApplyPoliciesCore();
+    }
+
+    private void ApplyPoliciesCore()
     {
         var current = policy.Current;
         var paused = _isPaused();

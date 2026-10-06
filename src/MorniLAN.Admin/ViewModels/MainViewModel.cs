@@ -23,17 +23,6 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private const int DiagnosticsPage = 4;
     private const int SettingsPage = 5;
 
-    private static readonly string[] Pages = ["Übersicht", "Freigaben", "Fernzugriff", "Aktionen", "Diagnose", "Einstellungen"];
-    private static readonly string[] Placeholders =
-    [
-        "",
-        "",
-        "Fernzugriff mit Sunshine und Moonlight folgt in Meilenstein 7.",
-        "Aktionen (Installieren, Nachricht, Neustart) folgen in Meilenstein 8.",
-        "",
-        "",
-    ];
-
     private readonly DispatcherTimer _presenceTimer = new() { Interval = TimeSpan.FromSeconds(5) };
     private AdminSettings _settings = AdminSettings.Load();
     private readonly DispatcherTimer _updateTimer = new() { Interval = TimeSpan.FromHours(6) };
@@ -71,8 +60,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     // --- Navigation ---------------------------------------------------------
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsOverview), nameof(IsApps), nameof(IsRemote), nameof(IsActions), nameof(IsDiagnostics), nameof(IsSettings), nameof(IsPlaceholder),
-        nameof(PageTitle), nameof(PagePlaceholder))]
+    [NotifyPropertyChangedFor(nameof(IsOverview), nameof(IsApps), nameof(IsRemote), nameof(IsActions), nameof(IsDiagnostics), nameof(IsSettings))]
     public partial int SelectedNavIndex { get; set; }
 
     public bool IsOverview => SelectedNavIndex <= 0;
@@ -81,9 +69,6 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public bool IsActions => SelectedNavIndex == ActionsPage;
     public bool IsDiagnostics => SelectedNavIndex == DiagnosticsPage;
     public bool IsSettings => SelectedNavIndex == SettingsPage;
-    public bool IsPlaceholder => !IsOverview && !IsApps && !IsRemote && !IsActions && !IsDiagnostics && !IsSettings;
-    public string PageTitle => Pages[Math.Clamp(SelectedNavIndex, 0, Pages.Length - 1)];
-    public string PagePlaceholder => Placeholders[Math.Clamp(SelectedNavIndex, 0, Placeholders.Length - 1)];
 
     partial void OnSelectedNavIndexChanged(int value)
     {
@@ -107,12 +92,15 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     public bool IsSetupPairing => SetupStep == 2;
     public bool IsSetupDone => SetupStep == 3;
 
+    private bool _setupPairingAdvanced;
+
     /// <summary>Assistent (erneut) öffnen – von den Einstellungen aus.</summary>
     [RelayCommand]
     private void StartSetup()
     {
         SelectedNavIndex = 0;
         SetupStep = 0;
+        _setupPairingAdvanced = false;
         ShowSetup = true;
     }
 
@@ -395,9 +383,13 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             p => new PendingPairingViewModel(p, server.Pairing), (vm, p) => vm.Update(p));
 
         HasNoDevices = Devices.Count == 0;
-        // Im Assistenten: sobald das erste Gerät gekoppelt ist, zum Abschluss-Schritt springen
-        if (ShowSetup && SetupStep == 2 && Devices.Count > 0)
+        // Im Assistenten: beim ersten gekoppelten Gerät einmal zum Abschluss springen – aber nur einmal,
+        // sonst würde „Zurück“ (Schritt 3 → 2) im nächsten Tick sofort wieder vorspringen.
+        if (ShowSetup && SetupStep == 2 && !_setupPairingAdvanced && Devices.Count > 0)
+        {
+            _setupPairingAdvanced = true;
             SetupStep = 3;
+        }
         Apps.SyncDevices();
         Remote.SyncDevices();
         Actions.SyncDevices();

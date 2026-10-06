@@ -34,7 +34,25 @@ internal static class SunshineInstaller
         });
         if (process is null)
             return -1;
-        await process.WaitForExitAsync(cancellationToken);
+
+        // Die Ausgabe nebenher leeren, sonst blockiert winget beim Schreiben (voller Pipe-Puffer) → Deadlock.
+        var drain = Task.WhenAll(
+            process.StandardOutput.ReadToEndAsync(cancellationToken),
+            process.StandardError.ReadToEndAsync(cancellationToken));
+
+        // Eigenes Timeout: Installationen hängen sonst unbegrenzt (Aufrufer gibt kein Token mit).
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            try { process.Kill(entireProcessTree: true); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
+            return -1;
+        }
+        try { await drain; } catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
         return process.ExitCode;
     }
 }
