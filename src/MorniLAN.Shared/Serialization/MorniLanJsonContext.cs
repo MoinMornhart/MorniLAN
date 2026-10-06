@@ -26,6 +26,7 @@ namespace MorniLAN.Shared.Serialization;
 [JsonSerializable(typeof(RestrictionState))]
 [JsonSerializable(typeof(HelpRequest))]
 [JsonSerializable(typeof(LauncherInbox.ProfileRequest))]
+[JsonSerializable(typeof(LauncherInbox.ProfileEdit))]
 [JsonSerializable(typeof(LauncherInbox.HelpMessage))]
 [JsonSerializable(typeof(DeviceInfo))]
 [JsonSerializable(typeof(DeviceStatus))]

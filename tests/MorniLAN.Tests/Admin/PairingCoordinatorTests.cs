@@ -148,5 +148,7 @@ public sealed class PairingCoordinatorTests : IDisposable
         public Task OnDeleteProfile(string profileId) => Task.CompletedTask;
 
         public Task OnApplyRestrictions() => Task.CompletedTask;
+
+        public Task OnResetProfilePassword(string profileId) => Task.CompletedTask;
     }
 }

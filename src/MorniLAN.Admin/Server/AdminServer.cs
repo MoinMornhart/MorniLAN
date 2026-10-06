@@ -186,6 +186,16 @@ public sealed class AdminServer : IAsyncDisposable
         return true;
     }
 
+    /// <summary>Passwort eines Profils zurücksetzen (der Nutzer hat es vergessen). Geht nur, solange der PC online ist.</summary>
+    public async Task<bool> ResetProfilePasswordAsync(Guid deviceId, string profileId)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnResetProfilePassword(profileId);
+        return true;
+    }
+
     /// <summary>Profil löschen, samt seiner eigenen Freigaben. Geht nur, solange der PC online ist.</summary>
     public async Task<bool> DeleteProfileAsync(Guid deviceId, string profileId)
     {

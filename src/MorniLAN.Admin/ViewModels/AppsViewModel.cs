@@ -101,7 +101,8 @@ public sealed class ProfileRowViewModel(LauncherProfile profile, int ownRules)
     public string Name => Profile.Name;
     public string Initial => Profile.Name.Length > 0 ? char.ToUpperInvariant(Profile.Name[0]).ToString() : "?";
     public IBrush Brush { get; } = new SolidColorBrush(Color.Parse(ProfileColors.Normalize(profile.Color)));
-    public string Details => ownRules switch
+    public bool HasPassword => Profile.HasPassword;
+    public string Details => (Profile.HasPassword ? "🔒 mit Passwort · " : "") + ownRules switch
     {
         0 => "folgt den Freigaben des PCs",
         1 => "1 eigene Abweichung",
@@ -413,6 +414,16 @@ public sealed partial class AppsViewModel : ObservableObject
         ProfileMessage = await server.DeleteProfileAsync(device.Id, row.Profile.Id)
             ? $"Profil „{row.Name}“ wird gelöscht …"
             : "Profile lassen sich nur löschen, während der PC online ist.";
+    }
+
+    [RelayCommand]
+    private async Task ResetPasswordAsync(ProfileRowViewModel row)
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+            return;
+        ProfileMessage = await server.ResetProfilePasswordAsync(device.Id, row.Profile.Id)
+            ? $"Passwort von „{row.Name}“ wird zurückgesetzt …"
+            : "Das geht nur, während der PC online ist.";
     }
 
     [ObservableProperty] public partial DeviceChoice? SelectedDevice { get; set; }

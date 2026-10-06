@@ -144,6 +144,11 @@ internal sealed class AdminConnectionService(
                 logger.LogInformation("Profil {Id} vom Admin gelöscht", id);
         });
         connection.On(nameof(IAgentClient.OnApplyRestrictions), () => restrictions?.ApplyNow());
+        connection.On<string>(nameof(IAgentClient.OnResetProfilePassword), id =>
+        {
+            if (profiles?.ClearPassword(id) == true)
+                logger.LogInformation("Passwort von Profil {Id} vom Admin zurückgesetzt", id);
+        });
         connection.On<AppPolicy>(nameof(IAgentClient.OnPolicyChanged), async received =>
         {
             try { await ApplyPolicyAsync(connection, received, authoritative: false, refreshRequested, stoppingToken); }

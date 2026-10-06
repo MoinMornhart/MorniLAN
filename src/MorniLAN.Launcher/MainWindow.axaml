@@ -58,7 +58,11 @@
   </Window.Styles>
 
   <Grid RowDefinitions="*,Auto">
-    <Panel x:Name="ContentArea">
+    <Panel x:Name="ContentArea" Background="{Binding Background}">
+      <!-- Eigenes Hintergrundbild des Profils, dezent abgedunkelt für Lesbarkeit -->
+      <Image Source="{Binding BackgroundImage}" IsVisible="{Binding HasBackgroundImage}" Stretch="UniformToFill" />
+      <Panel IsVisible="{Binding HasBackgroundImage}" Background="#99000000" />
+
       <!-- Begrüßung / Hinweis -->
       <StackPanel IsVisible="{Binding IsWelcome}" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
         <TextBlock Text="MorniLAN" FontSize="56" FontWeight="Bold" HorizontalAlignment="Center" Foreground="#E8EAF0" />
@@ -99,12 +103,20 @@
                         Command="{Binding $parent[Window].((local:LauncherViewModel)DataContext).SelectProfileCommand}"
                         CommandParameter="{Binding}">
                   <StackPanel Spacing="16" VerticalAlignment="Center" HorizontalAlignment="Center">
-                    <Border Width="110" Height="110" CornerRadius="55" Background="{Binding Brush}" HorizontalAlignment="Center">
-                      <TextBlock Text="{Binding Initial}" FontSize="52" FontWeight="Bold" Foreground="#0F1115"
-                                 HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <Border Width="110" Height="110" CornerRadius="55" Background="{Binding Brush}" HorizontalAlignment="Center"
+                            ClipToBounds="True">
+                      <Panel>
+                        <TextBlock Text="{Binding Initial}" FontSize="52" FontWeight="Bold" Foreground="#0F1115"
+                                   IsVisible="{Binding !HasAvatar}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        <Image Source="{Binding Avatar}" IsVisible="{Binding HasAvatar}" Stretch="UniformToFill" />
+                      </Panel>
                     </Border>
-                    <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" Foreground="#E8EAF0"
-                               HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="160" />
+                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                      <TextBlock Text="🔒" FontSize="16" IsVisible="{Binding HasPassword}" VerticalAlignment="Center" />
+                      <TextBlock Text="{Binding Name}" FontSize="20" FontWeight="SemiBold" Foreground="#E8EAF0"
+                                 TextTrimming="CharacterEllipsis" MaxWidth="150" />
+                    </StackPanel>
                   </StackPanel>
                 </Button>
               </DataTemplate>
@@ -125,6 +137,20 @@
                 Content="Weiter ohne Profil" Command="{Binding ContinueWithoutProfileCommand}" />
       </StackPanel>
 
+      <!-- Passwortabfrage -->
+      <StackPanel x:Name="PasswordView" IsVisible="{Binding IsPassword}" HorizontalAlignment="Center"
+                  VerticalAlignment="Center" Spacing="18" Width="420">
+        <TextBlock Text="{Binding PasswordPrompt}" FontSize="28" FontWeight="Bold" HorizontalAlignment="Center"
+                   Foreground="#E8EAF0" TextAlignment="Center" />
+        <TextBox x:Name="PasswordBox" Text="{Binding PasswordInput}" PasswordChar="●" FontSize="20"
+                 HorizontalContentAlignment="Center" PlaceholderText="Passwort" />
+        <TextBlock Text="{Binding PasswordError}" Foreground="#FF6B6B" HorizontalAlignment="Center" />
+        <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+          <Button Classes="dialog" Content="Zurück" Command="{Binding BackCommand}" />
+          <Button Classes="dialog accent" Content="Öffnen" Command="{Binding ConfirmPasswordCommand}" />
+        </StackPanel>
+      </StackPanel>
+
       <!-- Kacheln -->
       <ScrollViewer x:Name="HomeView" IsVisible="{Binding IsHome}" Padding="48,32,30,16">
         <StackPanel Spacing="16">
@@ -139,6 +165,9 @@
                 <TextBlock Text="{Binding ProfileName}" FontSize="24" FontWeight="SemiBold" VerticalAlignment="Center" />
               </StackPanel>
             </Button>
+            <Button Grid.Column="1" Classes="bar" Margin="12,0" VerticalAlignment="Center" IsVisible="{Binding HasProfile}"
+                    Command="{Binding OpenEditProfileCommand}" AutomationProperties.Name="Mein Profil einrichten"
+                    Content="Mein Profil" ToolTip.Tip="Farbe, Hintergrund, Avatar und Passwort" />
             <TextBox x:Name="SearchBox" Grid.Column="2" Width="360" Text="{Binding SearchText}" FontSize="16"
                      PlaceholderText="Suchen …  (Y am Controller)" VerticalAlignment="Center" />
           </Grid>
@@ -283,6 +312,77 @@
             <Button Classes="dialog" Content="Abmelden" Command="{Binding LogOffCommand}" HorizontalAlignment="Stretch" />
             <Button Classes="dialog" Content="Abbrechen" Command="{Binding BackCommand}" HorizontalAlignment="Stretch" />
           </StackPanel>
+        </Border>
+
+        <!-- Profil einrichten -->
+        <Border IsVisible="{Binding ShowEditProfile}" x:Name="EditProfileDialog" Background="#1A1E26" CornerRadius="16"
+                Padding="36,30" HorizontalAlignment="Center" VerticalAlignment="Center" Width="640" MaxHeight="640">
+          <ScrollViewer>
+            <StackPanel Spacing="16">
+              <TextBlock Text="{Binding EditTitle}" FontSize="28" FontWeight="Bold" Foreground="#E8EAF0" />
+
+              <TextBlock Text="Farbe" Foreground="#9AA3B2" />
+              <ItemsControl ItemsSource="{Binding Colors}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="10" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:ColorChoice">
+                    <Button Classes="dialog" MinWidth="0" Width="44" Height="44" Padding="0" CornerRadius="22"
+                            Background="{Binding Brush}" AutomationProperties.Name="{Binding Hex}"
+                            BorderBrush="#E8EAF0" BorderThickness="{Binding IsSelected, Converter={x:Static local:Converters.SelectedBorder}}"
+                            Command="{Binding $parent[Window].((local:LauncherViewModel)DataContext).PickColorCommand}"
+                            CommandParameter="{Binding}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <TextBlock Text="Hintergrund (Gaming-Themes)" Foreground="#9AA3B2" />
+              <ItemsControl ItemsSource="{Binding Themes}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="local:ThemeChoice">
+                    <Button Classes="dialog" MinWidth="0" Width="92" Height="58" Padding="0" Margin="0,0,10,10" CornerRadius="8"
+                            Background="{Binding Preview}" AutomationProperties.Name="{Binding Name}"
+                            BorderBrush="#E8EAF0" BorderThickness="{Binding IsSelected, Converter={x:Static local:Converters.SelectedBorder}}"
+                            Command="{Binding $parent[Window].((local:LauncherViewModel)DataContext).PickThemeCommand}"
+                            CommandParameter="{Binding}">
+                      <TextBlock Text="{Binding Name}" FontSize="11" Foreground="#E8EAF0" VerticalAlignment="Bottom"
+                                 Margin="6,0,0,4" />
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Classes="dialog" Content="Eigenes Hintergrundbild …" Command="{Binding PickBackgroundCommand}" />
+                <Button Classes="dialog" Content="Bild entfernen" Command="{Binding RemoveBackgroundCommand}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Classes="dialog" Content="Profilbild (Avatar) …" Command="{Binding PickAvatarCommand}" />
+                <Button Classes="dialog" Content="Avatar entfernen" Command="{Binding RemoveAvatarCommand}" />
+              </StackPanel>
+
+              <TextBlock Text="Passwort (schützt nur die Profilauswahl, kein Windows-Login)" Foreground="#9AA3B2" />
+              <TextBox Text="{Binding EditPassword}" PasswordChar="●" PlaceholderText="Neues Passwort (leer lassen = unverändert)" />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Classes="dialog" Content="Passwort entfernen" IsVisible="{Binding EditHasPassword}"
+                        Command="{Binding RemovePasswordCommand}" />
+              </StackPanel>
+
+              <TextBlock Text="{Binding EditMessage}" Foreground="#3DDC84" />
+              <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                <Button Classes="dialog" Content="Schließen" Command="{Binding BackCommand}" />
+                <Button Classes="dialog accent" Content="Speichern" Command="{Binding SaveEditProfileCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
         </Border>
       </Panel>
     </Panel>

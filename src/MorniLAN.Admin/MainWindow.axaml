@@ -284,6 +284,9 @@
                           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
                           <TextBlock Text="{Binding Details}" Classes="label" />
                         </StackPanel>
+                        <Button Content="Passwort zurücksetzen" VerticalAlignment="Center" IsVisible="{Binding HasPassword}"
+                                Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Apps.ResetPasswordCommand}"
+                                CommandParameter="{Binding}" />
                         <Button Content="Löschen" VerticalAlignment="Center"
                                 Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Apps.DeleteProfileCommand}"
                                 CommandParameter="{Binding}" />

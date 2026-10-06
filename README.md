@@ -92,6 +92,7 @@ Ausführliche Anleitung mit Fehlersuche: [docs/einrichtung.md](docs/einrichtung.
 | 🔄 | **Automatische Updates:** Das Panel bietet neue Versionen an, die PCs aktualisieren sich selbst, aber nie mitten im Spiel | ✅ in der Beta |
 | ✅ | **Freigaben:** per Schalter festlegen, was im Launcher erscheint (Standard: alles frei), eigene Einträge für Programme, die MorniLAN nicht selbst findet | ✅ in der Beta |
 | 🖥️ | **Launcher wie eine Konsole:** startet bei der Anmeldung im Vollbild, „Wer spielt?“ mit Profilen, Suche, „Zuletzt gespielt“, Leiste mit Uhr, Ton und WLAN, Bedienung auch mit dem Controller | ✅ in der Beta |
+| 🎨 | **Profile gestalten:** jeder richtet sein Profil selbst ein – Farbe, Gaming-Hintergrund, eigenes Bild, Avatar, und ein optionales Passwort für die Profilauswahl | ✅ in der Beta |
 | 🔒 | **Windows-Sperren:** je Konto wählen, ob es eingeschränkt wird (Admin-Konten nie); Einstellungen, Konsole, Registry, Task-Manager und Installieren sperrbar, mit Notfall-Entsperrung am PC | ✅ in der Beta |
 | 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen, über Sunshine und Moonlight | 🔜 geplant |
 | 🙋 | **Hilfe anfordern:** ein Knopf im Launcher, du bekommst sofort einen Hinweis im Panel | ✅ in der Beta |
