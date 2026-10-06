@@ -29,7 +29,8 @@ internal sealed class AdminConnectionService(
     Policy.AgentPolicyStore? policy = null,
     Policy.LauncherCatalog? catalog = null,
     Policy.AgentProfileStore? profiles = null,
-    Policy.LauncherInboxService? inbox = null) : BackgroundService
+    Policy.LauncherInboxService? inbox = null,
+    Restrictions.RestrictionService? restrictions = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -142,6 +143,7 @@ internal sealed class AdminConnectionService(
             if (profiles?.Remove(id) == true)
                 logger.LogInformation("Profil {Id} vom Admin gelöscht", id);
         });
+        connection.On(nameof(IAgentClient.OnApplyRestrictions), () => restrictions?.ApplyNow());
         connection.On<AppPolicy>(nameof(IAgentClient.OnPolicyChanged), async received =>
         {
             try { await ApplyPolicyAsync(connection, received, authoritative: false, refreshRequested, stoppingToken); }
@@ -249,6 +251,23 @@ internal sealed class AdminConnectionService(
                 if (inbox.PendingHelp is { } waiting)
                     SendHelp(waiting);
             }
+
+            // Konten und Sperren-Stand ans Panel: jetzt und bei jeder Änderung
+            void ReportAccounts(IReadOnlyList<LocalAccount> accounts) =>
+                _ = connection.InvokeAsync(nameof(IAdminHub.ReportAccounts), accounts.ToArray(), session.Token)
+                    .ContinueWith(t => logger.LogDebug("Konten nicht gemeldet: {Error}", t.Exception?.GetBaseException().Message),
+                        TaskContinuationOptions.OnlyOnFaulted);
+            void ReportRestrictions(RestrictionState state) =>
+                _ = connection.InvokeAsync(nameof(IAdminHub.ReportRestrictionState), state, session.Token)
+                    .ContinueWith(t => logger.LogDebug("Sperren-Stand nicht gemeldet: {Error}", t.Exception?.GetBaseException().Message),
+                        TaskContinuationOptions.OnlyOnFaulted);
+            if (restrictions is not null)
+            {
+                restrictions.AccountsChanged += ReportAccounts;
+                restrictions.StateChanged += ReportRestrictions;
+                ReportAccounts(restrictions.Accounts);
+                ReportRestrictions(restrictions.State);
+            }
             try
             {
                 await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
@@ -259,6 +278,11 @@ internal sealed class AdminConnectionService(
                     profiles.Changed -= ReportProfiles;
                 if (inbox is not null)
                     inbox.HelpRequested -= SendHelp;
+                if (restrictions is not null)
+                {
+                    restrictions.AccountsChanged -= ReportAccounts;
+                    restrictions.StateChanged -= ReportRestrictions;
+                }
                 if (updates is not null)
                     updates.StateChanged -= ReportUpdate;
                 await session.CancelAsync();

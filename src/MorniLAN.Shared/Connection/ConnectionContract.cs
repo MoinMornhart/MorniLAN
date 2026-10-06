@@ -72,6 +72,12 @@ public interface IAdminHub
 
     /// <summary>Jemand hat im Launcher „Hilfe anfordern“ gedrückt.</summary>
     Task RequestHelp(HelpRequest request);
+
+    /// <summary>Windows-Konten des PCs (nach dem Verbinden und bei Änderung), damit der Admin wählt, wen er einschränkt.</summary>
+    Task ReportAccounts(LocalAccount[] accounts);
+
+    /// <summary>Stand der Sperren auf dem PC: angewandt, oder eine Meldung, falls etwas nicht ging.</summary>
+    Task ReportRestrictionState(RestrictionState state);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -100,6 +106,9 @@ public interface IAgentClient
 
     /// <summary>Der Admin löscht ein Profil.</summary>
     Task OnDeleteProfile(string profileId);
+
+    /// <summary>Der Admin will die Sperren jetzt neu anwenden (z. B. „Sperren jetzt aktivieren“).</summary>
+    Task OnApplyRestrictions();
 }
 
 public enum HelloStatus

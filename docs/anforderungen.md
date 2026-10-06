@@ -21,9 +21,12 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
 
 - Windows-Dienst unter LocalSystem, startet automatisch.
 - Verbindet sich mit dem Admin-Panel, empfängt Freigaben und Befehle und meldet den Status.
-- Setzt Sperren durch:
-  - erlaubte Programme per AppLocker oder WDAC, je nach verfügbarer Windows-Edition. Er prüft die Edition und wählt passend, mit einem Fallback über einen Prozess-Wächter, der nicht erlaubte Prozesse beendet;
-  - Windows-Richtlinien per Registry bzw. Gruppenrichtlinien für den Benutzer: Systemsteuerung/Einstellungen eingeschränkt, keine Eingabeaufforderung/PowerShell/Regedit, kein Task-Manager (optional), keine Software-Installation.
+- Setzt Sperren durch (M6, entschieden 2026-10-06):
+  - **Prozess-Wächter** beendet gesperrte Programme, **nur in den eingeschränkten Konten**, nie im Admin-Konto;
+  - **Benutzer-Richtlinien** (Registry im Zweig des jeweiligen Kontos, bei Bedarf NTUSER.DAT laden): Einstellungen/Systemsteuerung, Eingabeaufforderung/PowerShell, Registry-Editor, Task-Manager, Programme installieren – je nach Auswahl im Panel;
+  - **App Control (WDAC)** als harte Sperre für den ganzen PC: kommt als eigener Schritt mit **Prüfmodus zuerst** (erst protokollieren, dann scharf), weil ein Fehler sonst Windows lahmlegen könnte; `Disable` ist schon sicher umgesetzt;
+  - der Admin wählt im Panel, **welche Konten** eingeschränkt werden (Administratorkonten nie wählbar); nicht angehakte Konten behalten den **normalen** Windows-Desktop (Wunsch „normalen Zugriff geben“);
+  - **Notfall-Entsperrung** am PC über den Startmenü-Eintrag „MorniLAN Notfall-Entsperrung“ (fragt per UAC nach Administrator-Rechten, hebt alle Sperren sofort auf, auch ohne Panel); erst „Sperren jetzt aktivieren“ im Panel schaltet sie wieder ein.
 - Liest Steam aus:
   - `libraryfolders.vdf` und `appmanifest_*.acf` parsen und installierte Spiele samt Name, AppID, Größe und Icon an das Panel melden;
   - Spielstart über `steam://rungameid/<AppID>`.

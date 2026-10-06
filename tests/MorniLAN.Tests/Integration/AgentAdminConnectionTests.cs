@@ -373,15 +373,65 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await StopAsync(agent);
     }
 
+    /// <summary>M6 über TLS: Konten werden gemeldet; der Admin schränkt eins ein und sperrt einen Bereich; „Sperren jetzt“ kommt an.</summary>
+    [Fact]
+    public async Task Restrictions_ReportAccounts_SetFromPanel_AndApplyNow()
+    {
+        await using var admin = await StartAdminAsync(_adminDir.Path);
+        var policy = new MorniLAN.Agent.Policy.AgentPolicyStore(_agentDir.Path);
+        var accounts = new[]
+        {
+            new LocalAccount("S-1-5-21-900", "Freund", false),
+            new LocalAccount("S-1-5-21-901", "Chef", true),
+        };
+        var applied = 0;
+        var restrictions = new MorniLAN.Agent.Restrictions.RestrictionService(policy,
+            NullLogger<MorniLAN.Agent.Restrictions.RestrictionService>.Instance,
+            writePolicies: (_, _) => Interlocked.Increment(ref applied), clearPolicies: _ => { },
+            terminate: _ => { }, enumerate: () => [], scanAccounts: () => accounts);
+
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path, AdminHost = "127.0.0.1", AdminPort = admin.Port,
+            EnableDiscovery = false, HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        var agent = await StartAgentAsync(options, policy: policy, restrictions: restrictions);
+        using var cts = new CancellationTokenSource();
+        await restrictions.StartAsync(cts.Token);
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        var deviceId = new AgentStateStore(_agentDir.Path).Current.DeviceId;
+
+        // Konten kommen im Panel an (inkl. Admin-Kennzeichen)
+        await WaitUntil(() => admin.Accounts.Get(deviceId).Length == 2, "Konten im Panel");
+        Assert.True(admin.Accounts.Get(deviceId).Single(a => a.Name == "Chef").IsAdministrator);
+
+        // Admin schränkt „Freund“ ein und sperrt die Konsole → der Agent setzt Richtlinien
+        var before = applied;
+        await admin.UpdatePolicyAsync(deviceId, (p, now) =>
+            p.WithRestrictedAccount("S-1-5-21-900", true, now).WithBlockedArea(WindowsAreas.Console, true, now));
+        await WaitUntil(() => applied > before, "Richtlinien gesetzt");
+        await WaitUntil(() => admin.Accounts.State(deviceId).RestrictedAccountCount == 1, "Stand gemeldet");
+
+        // „Sperren jetzt aktivieren“
+        var before2 = applied;
+        Assert.True(await admin.ApplyRestrictionsAsync(deviceId));
+        await WaitUntil(() => applied > before2, "erneut angewandt");
+
+        await cts.CancelAsync();
+        await restrictions.StopAsync(CancellationToken.None);
+        await StopAsync(agent);
+    }
+
     private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
         DiscoveryListener? discovery = null, InventoryService? inventory = null,
         MorniLAN.Agent.Policy.AgentPolicyStore? policy = null, MorniLAN.Agent.Policy.AgentProfileStore? profiles = null,
-        MorniLAN.Agent.Policy.LauncherInboxService? inbox = null)
+        MorniLAN.Agent.Policy.LauncherInboxService? inbox = null, MorniLAN.Agent.Restrictions.RestrictionService? restrictions = null)
     {
         var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
         var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
             identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory,
-            policy: policy, profiles: profiles, inbox: inbox);
+            policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions);
         await service.StartAsync(Ct);
         return service;
     }

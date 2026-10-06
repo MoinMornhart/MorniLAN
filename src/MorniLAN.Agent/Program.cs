@@ -4,11 +4,16 @@ using MorniLAN.Agent.Connection;
 using MorniLAN.Agent.Inventory;
 using MorniLAN.Agent.Platform;
 using MorniLAN.Agent.Policy;
+using MorniLAN.Agent.Restrictions;
 using MorniLAN.Shared.Connection;
 using MorniLAN.Agent.Updates;
 using MorniLAN.Shared;
 using Serilog;
 using Serilog.Events;
+
+// Notfall-Entsperrung am PC (Startmenü): hebt alle Sperren auf, fragt bei Bedarf per UAC nach Admin-Rechten.
+if (args.Contains(EmergencyUnlock.Argument))
+    return EmergencyUnlock.Run(AgentPaths.Data);
 
 // Nur ein Agent pro PC: zwei Instanzen teilen sich Zertifikat und Pin und stören sich beim Pairing.
 using var singleInstance = new Mutex(initiallyOwned: false, @"Global\MorniLAN.Agent");
@@ -68,6 +73,16 @@ builder.Services.AddSingleton<InventoryService>();
 builder.Services.AddSingleton<LauncherCatalog>();
 builder.Services.AddSingleton<LauncherInboxService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LauncherInboxService>());
+builder.Services.AddSingleton(sp =>
+{
+    var data = sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory;
+    var paused = EmergencyUnlock.PausedFile(data);
+    return new RestrictionService(sp.GetRequiredService<AgentPolicyStore>(),
+        sp.GetRequiredService<ILogger<RestrictionService>>(),
+        isPaused: () => File.Exists(paused),
+        resume: () => { try { File.Delete(paused); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
+});
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RestrictionService>());
 builder.Services.AddSingleton<AgentUpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
 builder.Services.AddSingleton<DiscoveryListener>();

@@ -51,6 +51,8 @@ Source: "{#SourceDir}\MorniLAN.Launcher\*"; Excludes: "*.pdb"; DestDir: "{app}\L
 
 [Icons]
 Name: "{autoprograms}\MorniLAN"; Filename: "{app}\Launcher\MorniLAN.Launcher.exe"; Comment: "Status und Pairing-Code"
+; Notfall-Entsperrung: hebt mit Admin-Passwort alle Sperren auf, auch wenn das Panel nicht erreichbar ist.
+Name: "{autoprograms}\MorniLAN Notfall-Entsperrung"; Filename: "{app}\Agent\MorniLAN.Agent.exe"; Parameters: "--emergency-unlock"; Comment: "Alle MorniLAN-Sperren aufheben (Administrator-Rechte nötig)"
 
 [Registry]
 ; Launcher bei jeder Anmeldung starten. In Administratorkonten beendet er sich mit --autostart sofort wieder,

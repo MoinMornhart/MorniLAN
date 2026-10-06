@@ -104,6 +104,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Inventory.Changed += OnInventoryChanged;
             server.Policies.Changed += OnPolicyChanged;
             server.Profiles.Changed += OnProfilesChanged;
+            server.Accounts.Changed += OnAccountsChanged;
             server.Help.Changed += OnHelpChanged;
             ServerStatus =$"Bereit – wartet auf PCs (Port {server.Port})";
             ServerDetails = $"Name im Netzwerk {server.Identity.Name} · Zertifikat {CertificateFingerprint.Short(server.Identity.Fingerprint)}";
@@ -286,6 +287,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnProfilesChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.ProfilesChanged(deviceId));
 
+    private void OnAccountsChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.AccountsChanged(deviceId));
+
     /// <summary>Offene Hilfe-Anfragen (Banner auf der Übersicht). Eine neue holt das Fenster nach vorne.</summary>
     public ObservableCollection<HelpNoticeViewModel> HelpNotices { get; } = [];
 
@@ -364,6 +367,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Inventory.Changed -= OnInventoryChanged;
             server.Policies.Changed -= OnPolicyChanged;
             server.Profiles.Changed -= OnProfilesChanged;
+            server.Accounts.Changed -= OnAccountsChanged;
             server.Help.Changed -= OnHelpChanged;
             await server.DisposeAsync();
         }
