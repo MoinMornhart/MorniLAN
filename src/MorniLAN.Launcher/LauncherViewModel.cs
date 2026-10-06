@@ -421,6 +421,36 @@ public sealed partial class LauncherViewModel : ObservableObject
         RemoteAsking = false;
     }
 
+    // --- Panel-Adresse von Hand (falls die automatische Suche scheitert, z. B. Tailscale) ---
+
+    [ObservableProperty] public partial string AdminHostInput { get; set; } = "";
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasConnectionMessage))]
+    public partial string ConnectionMessage { get; set; } = "";
+
+    public bool HasConnectionMessage => ConnectionMessage.Length > 0;
+
+    [RelayCommand]
+    private void SubmitAdminHost()
+    {
+        var host = AdminHostInput.Trim();
+        if (LauncherInbox.ConnectionRequest.Validate(host) is { } error)
+        {
+            ConnectionMessage = error;
+            return;
+        }
+        try
+        {
+            LauncherInbox.WriteConnectionRequest(InboxFolder, new LauncherInbox.ConnectionRequest(host));
+            ConnectionMessage = $"Adresse {host} übernommen – verbinde …";
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            ConnectionMessage = "Konnte die Adresse nicht speichern.";
+        }
+    }
+
     private void ApplyFilter()
     {
         var profileId = CurrentProfile?.Profile.Id;

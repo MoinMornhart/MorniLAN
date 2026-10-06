@@ -27,6 +27,7 @@ namespace MorniLAN.Shared.Serialization;
 [JsonSerializable(typeof(RemoteSessionState))]
 [JsonSerializable(typeof(RemoteAccessSettings))]
 [JsonSerializable(typeof(LauncherInbox.RemoteConsent))]
+[JsonSerializable(typeof(LauncherInbox.ConnectionRequest))]
 [JsonSerializable(typeof(HelpRequest))]
 [JsonSerializable(typeof(LauncherInbox.ProfileRequest))]
 [JsonSerializable(typeof(LauncherInbox.ProfileEdit))]
