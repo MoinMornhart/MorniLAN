@@ -19,6 +19,7 @@ internal sealed class RemoteAccessService(
     Func<bool>? ensureSunshine = null,
     Func<bool>? sunshineInstalled = null,
     Func<string?>? hostAddress = null,
+    Func<CancellationToken, Task<bool>>? installSunshine = null,
     TimeProvider? time = null)
 {
     private static readonly TimeSpan ConsentTimeout = TimeSpan.FromSeconds(60);
@@ -26,11 +27,13 @@ internal sealed class RemoteAccessService(
     private readonly Func<bool> _ensureSunshine = ensureSunshine ?? SunshineControl.EnsureRunning;
     private readonly Func<bool> _sunshineInstalled = sunshineInstalled ?? SunshineControl.IsInstalled;
     private readonly Func<string?> _hostAddress = hostAddress ?? DefaultHost;
+    private readonly Func<CancellationToken, Task<bool>> _installSunshine = installSunshine ?? SunshineInstaller.InstallAsync;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly Lock _lock = new();
 
     private RemoteSessionState _state = RemoteSessionState.Idle;
     private DateTimeOffset _consentDeadline;
+    private bool _installing;
 
     public event Action<RemoteSessionState>? StateChanged;
 
@@ -48,12 +51,9 @@ internal sealed class RemoteAccessService(
     {
         if (!_sunshineInstalled())
         {
-            Set(_state with
-            {
-                Phase = RemoteSessionPhase.Unavailable,
-                Message = "Sunshine ist auf dem PC noch nicht eingerichtet. Bitte das Geräte-Setup mit Fernzugriff ausführen.",
-                Since = _time.GetUtcNow(),
-            });
+            // Sunshine fehlt: automatisch per winget einrichten und danach den Fernzugriff fortsetzen (keine Handarbeit)
+            if (!_installing)
+                _ = InstallSunshineThenStartAsync(allowWithoutConsent);
             return;
         }
         if (allowWithoutConsent)
@@ -121,6 +121,51 @@ internal sealed class RemoteAccessService(
         }
         Set(new RemoteSessionState(RemoteSessionPhase.Denied, false, null,
             "Keine Antwort am PC – Anfrage verworfen.", _time.GetUtcNow()));
+    }
+
+    /// <summary>
+    /// Richtet Sunshine ein (winget) und startet danach den Fernzugriff wie gewünscht. Läuft nebenher; der Zustand
+    /// „wird eingerichtet" wird gemeldet. Phase bleibt bewusst <see cref="RemoteSessionPhase.Unavailable"/>
+    /// (kein neuer Enum-Wert, damit ein älteres Panel es versteht) – nur die Meldung sagt, was gerade passiert.
+    /// </summary>
+    private async Task InstallSunshineThenStartAsync(bool allowWithoutConsent)
+    {
+        lock (_lock)
+        {
+            if (_installing)
+                return;
+            _installing = true;
+        }
+        Set(new RemoteSessionState(RemoteSessionPhase.Unavailable, false, null,
+            "Sunshine wird automatisch eingerichtet – das dauert ein paar Minuten …", _time.GetUtcNow()));
+        logger.LogInformation("Sunshine fehlt – wird per winget eingerichtet");
+        bool ok;
+        try
+        {
+            ok = await _installSunshine(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("Sunshine konnte nicht eingerichtet werden: {Error}", ex.Message);
+            ok = false;
+        }
+        finally
+        {
+            lock (_lock)
+                _installing = false;
+        }
+
+        if (ok && _sunshineInstalled())
+        {
+            logger.LogInformation("Sunshine eingerichtet, Fernzugriff wird fortgesetzt");
+            Start(allowWithoutConsent);
+        }
+        else
+        {
+            Set(new RemoteSessionState(RemoteSessionPhase.Unavailable, false, null,
+                "Sunshine ließ sich nicht automatisch einrichten. Bitte einmal von Hand installieren (winget: LizardByte.Sunshine).",
+                _time.GetUtcNow()));
+        }
     }
 
     private void Activate()
