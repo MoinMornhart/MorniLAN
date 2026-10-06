@@ -154,6 +154,7 @@ public static class LauncherInbox
     public const string EditPrefix = "edit-";
     public const string HelpPrefix = "help-";
     public const string RemotePrefix = "remote-";
+    public const string ConnPrefix = "conn-";
 
     /// <summary>Ordner unterhalb des Benutzerprofils (z. B. C:\Users\Freund).</summary>
     public static string FolderFor(string userProfileDirectory) =>
@@ -193,6 +194,31 @@ public static class LauncherInbox
 
     public static void WriteRemoteConsent(string folder, RemoteConsent consent) =>
         Write(folder, RemotePrefix, JsonSerializer.SerializeToUtf8Bytes(consent, MorniLanJsonContext.Default.RemoteConsent));
+
+    /// <summary>
+    /// Adresse des Admin-PCs, am Gerät im Launcher eingegeben (für den Fall, dass die automatische Suche scheitert,
+    /// z. B. Tailscale oder ein anderes Netz). Der Agent übernimmt sie und verbindet sich damit.
+    /// </summary>
+    public sealed record ConnectionRequest(string AdminHost)
+    {
+        public const int MaxHostLength = 120;
+
+        /// <summary>Fehlertext oder null. Erlaubt Hostnamen, IPv4/IPv6 und optional ":Port" – nichts Exotisches.</summary>
+        public static string? Validate(string? host)
+        {
+            var value = host?.Trim();
+            if (string.IsNullOrEmpty(value))
+                return "Bitte eine Adresse eingeben, z. B. 192.168.1.50 oder admin-pc.";
+            if (value.Length > MaxHostLength)
+                return "Die Adresse ist zu lang.";
+            if (value.Any(c => char.IsControl(c) || c is ' ' or '/' or '\\' or '"' or '\''))
+                return "Die Adresse enthält ungültige Zeichen.";
+            return null;
+        }
+    }
+
+    public static void WriteConnectionRequest(string folder, ConnectionRequest request) =>
+        Write(folder, ConnPrefix, JsonSerializer.SerializeToUtf8Bytes(request, MorniLanJsonContext.Default.ConnectionRequest));
 
     private static void Write(string folder, string prefix, byte[] data)
     {

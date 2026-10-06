@@ -746,6 +746,14 @@
           </Border>
           <Border Classes="card">
             <StackPanel Spacing="10">
+              <TextBlock Text="Einrichtung" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Der geführte Ablauf hilft bei Firewall und erstem Pairing. Du kannst ihn jederzeit erneut starten." />
+              <Button Content="Einrichtung starten" HorizontalAlignment="Left" Command="{Binding StartSetupCommand}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="card">
+            <StackPanel Spacing="10">
               <TextBlock Text="Updates" Classes="h2" />
               <TextBlock Classes="muted" TextWrapping="Wrap"
                          Text="Das Panel sucht beim Start und alle 6 Stunden auf GitHub nach neuen Versionen, Betas eingeschlossen. Die verwalteten PCs aktualisieren sich selbst, aber nie während eines Spiels; über die Karte des PCs geht es auch sofort." />
@@ -768,5 +776,129 @@
 
       </Panel>
     </ScrollViewer>
+
+    <!-- Einrichtungs-Assistent (First-Run): führt durch Firewall und erstes Pairing -->
+    <Border Grid.Column="0" Grid.ColumnSpan="2" IsVisible="{Binding ShowSetup}" ZIndex="100" Background="#DD0F1115">
+      <Border Classes="card" Width="660" MaxHeight="640" VerticalAlignment="Center" HorizontalAlignment="Center" Padding="28">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top" Spacing="4" Margin="0,0,0,18">
+            <TextBlock Text="Einrichtung" Classes="h2" />
+            <TextBlock Classes="label" Text="MorniLAN startklar machen" />
+          </StackPanel>
+
+          <Grid DockPanel.Dock="Bottom" ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,22,0,0">
+            <Button Content="Überspringen" Command="{Binding FinishSetupCommand}" IsVisible="{Binding !IsSetupDone}" />
+            <Button Grid.Column="2" Content="Zurück" Margin="0,0,8,0" Command="{Binding SetupBackCommand}"
+                    IsVisible="{Binding !IsSetupWelcome}" />
+            <Button Grid.Column="3" Content="Weiter" Classes="accent" Command="{Binding SetupNextCommand}"
+                    IsVisible="{Binding !IsSetupDone}" />
+            <Button Grid.Column="3" Content="Fertig" Classes="accent" Command="{Binding FinishSetupCommand}"
+                    IsVisible="{Binding IsSetupDone}" />
+          </Grid>
+
+          <ScrollViewer>
+            <Panel>
+              <!-- Schritt 0: Willkommen -->
+              <StackPanel Spacing="14" IsVisible="{Binding IsSetupWelcome}">
+                <TextBlock Text="Willkommen 👋" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Mit MorniLAN gibst du den Gaming-PC eines Freundes frei und behältst den Überblick – Spiele, Sperren, Fernzugriff, alles aus diesem Panel." />
+                <TextBlock TextWrapping="Wrap"
+                           Text="Diese Einrichtung dauert etwa zwei Minuten und hat zwei Schritte:" />
+                <StackPanel Spacing="6" Margin="8,0,0,0">
+                  <TextBlock Text="1.  Firewall freigeben, damit andere PCs dieses Panel im Netz erreichen." TextWrapping="Wrap" />
+                  <TextBlock Text="2.  Den ersten PC koppeln (einen kurzen Code eingeben)." TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Classes="label" TextWrapping="Wrap"
+                           Text="Du kannst jederzeit „Überspringen“ und später unter Einstellungen erneut starten." />
+              </StackPanel>
+
+              <!-- Schritt 1: Firewall -->
+              <StackPanel Spacing="14" IsVisible="{Binding IsSetupFirewall}">
+                <TextBlock Text="Schritt 1 – Firewall" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Damit die Geräte dieses Panel im Heimnetz (und über Tailscale) finden, braucht Windows einmal eine Freigabe. Es fragt dabei nach Administrator-Rechten." />
+                <Border Background="#15181E" CornerRadius="10" Padding="16">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding FirewallText}" VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0" />
+                    <Button Grid.Column="1" Classes="accent" Content="Firewall einrichten"
+                            Command="{Binding SetupFirewallCommand}" IsVisible="{Binding FirewallMissing}" />
+                    <TextBlock Grid.Column="1" Text="✓ erledigt" Foreground="#3DDC84"
+                               VerticalAlignment="Center" IsVisible="{Binding !FirewallMissing}" />
+                  </Grid>
+                </Border>
+                <TextBlock Classes="label" TextWrapping="Wrap"
+                           Text="Schon freigegeben? Dann einfach auf „Weiter“." />
+              </StackPanel>
+
+              <!-- Schritt 2: Erstes Gerät koppeln -->
+              <StackPanel Spacing="14" IsVisible="{Binding IsSetupPairing}">
+                <TextBlock Text="Schritt 2 – Ersten PC koppeln" FontSize="22" FontWeight="SemiBold" />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Auf dem Gaming-PC „MorniLAN für Geräte“ installieren und starten. Er findet dieses Panel im Heimnetz von selbst und zeigt einen Code an. Diesen Code hier eingeben:" />
+
+                <ItemsControl ItemsSource="{Binding PendingPairings}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Spacing="12" /></ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:PendingPairingViewModel">
+                      <Border Classes="card pending">
+                        <StackPanel Spacing="10">
+                          <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" />
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBox Text="{Binding Code}" PlaceholderText="XXXX-XXXX" Width="170" MaxLength="12"
+                                     FontFamily="Consolas" FontSize="18" />
+                            <Button Content="Koppeln" Classes="accent" Command="{Binding PairCommand}" IsDefault="True" />
+                          </StackPanel>
+                          <TextBlock Text="{Binding Error}" Foreground="#FF6B6B" IsVisible="{Binding HasError}" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border Background="#15181E" CornerRadius="10" Padding="16" IsVisible="{Binding HasNoDevices}">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="⏳ Warte auf den PC … sobald er sich meldet, erscheint hier sein Code-Feld." Classes="muted" TextWrapping="Wrap" />
+                    <TextBlock Classes="label" TextWrapping="Wrap"
+                               Text="Klappt die Suche nicht (Tailscale/anderes Netz): Trag im Geräte-Setup bei „Adresse des Admin-PCs“ eine dieser Adressen ein:" />
+                    <ItemsControl ItemsSource="{Binding Addresses}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:AddressItem">
+                          <Border Background="#0F1115" CornerRadius="8" Padding="10,6" Margin="0,0,8,8">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                              <StackPanel Spacing="0">
+                                <TextBlock Text="{Binding Kind}" Classes="label" />
+                                <SelectableTextBlock Text="{Binding Address}" FontFamily="Consolas, monospace" FontSize="14" />
+                              </StackPanel>
+                              <Button Content="Kopieren" VerticalAlignment="Center" FontSize="12"
+                                      Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).CopyCommand}"
+                                      CommandParameter="{Binding Address}" />
+                            </StackPanel>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </Border>
+              </StackPanel>
+
+              <!-- Schritt 3: Fertig -->
+              <StackPanel Spacing="14" IsVisible="{Binding IsSetupDone}">
+                <TextBlock Text="Geschafft! 🎉" FontSize="22" FontWeight="SemiBold" Foreground="#3DDC84" />
+                <TextBlock TextWrapping="Wrap"
+                           Text="Der erste PC ist gekoppelt. Du siehst ihn jetzt in der Übersicht – mit Status, Freigaben, Fernzugriff und Aktionen." />
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Weitere PCs fügst du genauso hinzu. Die Einrichtung kannst du unter Einstellungen jederzeit erneut starten." />
+              </StackPanel>
+            </Panel>
+          </ScrollViewer>
+        </DockPanel>
+      </Border>
+    </Border>
   </Grid>
 </Window>

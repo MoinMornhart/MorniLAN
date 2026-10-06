@@ -166,7 +166,7 @@ public sealed class ProfileTests : IDisposable
     // ───── Briefkasten Launcher → Dienst ─────
 
     private (LauncherInboxService Inbox, AgentProfileStore Profiles, AgentPolicyStore Policy, string Folder) NewInbox(
-        Func<DateTimeOffset>? now = null)
+        Func<DateTimeOffset>? now = null, Action<string>? onAdminHost = null)
     {
         var user = Path.Combine(_dir.Path, "Users", "Freund");
         var folder = LauncherInbox.FolderFor(user);
@@ -175,8 +175,49 @@ public sealed class ProfileTests : IDisposable
         var profiles = new AgentProfileStore(data);
         var policy = new AgentPolicyStore(data);
         var time = now is null ? null : new FakeTime(now);
-        var inbox = new LauncherInboxService(profiles, policy, NullLogger<LauncherInboxService>.Instance, () => [user], time);
+        var inbox = new LauncherInboxService(profiles, policy, NullLogger<LauncherInboxService>.Instance, () => [user], time,
+            onAdminHost: onAdminHost);
         return (inbox, profiles, policy, folder);
+    }
+
+    [Fact]
+    public void Inbox_ConnectionRequest_TakesAdminHost()
+    {
+        var hosts = new List<string>();
+        var (inbox, _, _, folder) = NewInbox(onAdminHost: hosts.Add);
+        LauncherInbox.WriteConnectionRequest(folder, new LauncherInbox.ConnectionRequest("192.168.1.50"));
+
+        inbox.ProcessOnce();
+
+        Assert.Equal("192.168.1.50", Assert.Single(hosts));
+    }
+
+    [Fact]
+    public void Inbox_ConnectionRequest_IgnoresInvalidHost()
+    {
+        var hosts = new List<string>();
+        var (inbox, _, _, folder) = NewInbox(onAdminHost: hosts.Add);
+        LauncherInbox.WriteConnectionRequest(folder, new LauncherInbox.ConnectionRequest("hat leer zeichen"));
+
+        inbox.ProcessOnce();
+
+        Assert.Empty(hosts);
+    }
+
+    [Theory]
+    [InlineData("192.168.1.50", null)]
+    [InlineData("admin-pc", null)]
+    [InlineData("admin-pc.tail1234.ts.net", null)]
+    [InlineData("", "Adresse")]
+    [InlineData("hat leerzeichen auch", "ungültige")]
+    [InlineData("has/slash", "ungültige")]
+    public void ConnectionRequest_Validate(string host, string? errorContains)
+    {
+        var error = LauncherInbox.ConnectionRequest.Validate(host);
+        if (errorContains is null)
+            Assert.Null(error);
+        else
+            Assert.Contains(errorContains, error);
     }
 
     [Fact]

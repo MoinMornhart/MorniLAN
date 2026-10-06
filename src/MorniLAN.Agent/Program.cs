@@ -71,7 +71,21 @@ builder.Services.AddSingleton(sp => new AgentProfileStore(
     sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory));
 builder.Services.AddSingleton<InventoryService>();
 builder.Services.AddSingleton<LauncherCatalog>();
-builder.Services.AddSingleton<LauncherInboxService>();
+builder.Services.AddSingleton(sp =>
+{
+    var options = sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value;
+    return new LauncherInboxService(
+        sp.GetRequiredService<AgentProfileStore>(),
+        sp.GetRequiredService<AgentPolicyStore>(),
+        sp.GetRequiredService<ILogger<LauncherInboxService>>(),
+        remote: sp.GetRequiredService<MorniLAN.Agent.Remote.RemoteAccessService>(),
+        // Adresse am Gerät eingegeben: live übernehmen (nächster Verbindungsversuch nutzt sie) und dauerhaft merken
+        onAdminHost: host =>
+        {
+            options.AdminHost = host;
+            AgentSettingsFile.WriteAdminHost(options.DataDirectory, host);
+        });
+});
 builder.Services.AddHostedService(sp => sp.GetRequiredService<LauncherInboxService>());
 builder.Services.AddSingleton(sp =>
 {

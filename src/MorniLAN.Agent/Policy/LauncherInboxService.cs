@@ -22,7 +22,8 @@ internal sealed class LauncherInboxService(
     ILogger<LauncherInboxService> logger,
     Func<IEnumerable<string>>? userFolders = null,
     TimeProvider? time = null,
-    Remote.RemoteAccessService? remote = null) : BackgroundService
+    Remote.RemoteAccessService? remote = null,
+    Action<string>? onAdminHost = null) : BackgroundService
 {
     internal static readonly TimeSpan HelpCooldown = TimeSpan.FromMinutes(1);
     internal static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(60);
@@ -162,6 +163,16 @@ internal sealed class LauncherInboxService(
             var consent = JsonSerializer.Deserialize(data, MorniLanJsonContext.Default.RemoteConsent);
             if (consent is not null)
                 remote?.Consent(consent.Allow);
+        }
+        else if (name.StartsWith(LauncherInbox.ConnPrefix, StringComparison.Ordinal))
+        {
+            var request = JsonSerializer.Deserialize(data, MorniLanJsonContext.Default.ConnectionRequest);
+            var host = request?.AdminHost?.Trim();
+            if (host is not null && LauncherInbox.ConnectionRequest.Validate(host) is null)
+            {
+                logger.LogInformation("Admin-Adresse am Gerät eingegeben: {Host}", host);
+                onAdminHost?.Invoke(host);
+            }
         }
         else if (name.StartsWith(LauncherInbox.HelpPrefix, StringComparison.Ordinal))
         {

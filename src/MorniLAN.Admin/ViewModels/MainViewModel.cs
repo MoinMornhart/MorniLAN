@@ -93,6 +93,54 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             Apps.Reload();
     }
 
+    // --- Einrichtungs-Assistent (First-Run) -----------------------------------
+
+    /// <summary>Overlay sichtbar? Schritte: 0 Willkommen, 1 Firewall, 2 Koppeln, 3 Fertig.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsSetupWelcome), nameof(IsSetupFirewall), nameof(IsSetupPairing), nameof(IsSetupDone))]
+    public partial int SetupStep { get; set; }
+
+    [ObservableProperty] public partial bool ShowSetup { get; set; }
+
+    public bool IsSetupWelcome => SetupStep == 0;
+    public bool IsSetupFirewall => SetupStep == 1;
+    public bool IsSetupPairing => SetupStep == 2;
+    public bool IsSetupDone => SetupStep == 3;
+
+    /// <summary>Assistent (erneut) öffnen – von den Einstellungen aus.</summary>
+    [RelayCommand]
+    private void StartSetup()
+    {
+        SelectedNavIndex = 0;
+        SetupStep = 0;
+        ShowSetup = true;
+    }
+
+    [RelayCommand]
+    private void SetupNext()
+    {
+        if (SetupStep < 3)
+            SetupStep++;
+    }
+
+    [RelayCommand]
+    private void SetupBack()
+    {
+        if (SetupStep > 0)
+            SetupStep--;
+    }
+
+    [RelayCommand]
+    private void FinishSetup()
+    {
+        ShowSetup = false;
+        if (!_settings.SetupCompleted)
+        {
+            _settings = _settings with { SetupCompleted = true };
+            _settings.Save();
+        }
+    }
+
     // --- Server ---------------------------------------------------------------
 
     [ObservableProperty] public partial string ServerStatus { get; set; } = "Server startet …";
@@ -133,6 +181,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         }
         RefreshAddresses();
         await CheckFirewallAsync();
+        // Beim ersten Start (noch kein PC gekoppelt) führt der Assistent durch Firewall und erstes Pairing
+        ShowSetup = !_settings.SetupCompleted && HasNoDevices;
         _updateTimer.Start();
         await Task.Delay(TimeSpan.FromSeconds(10));
         await CheckForUpdatesAsync();
@@ -345,6 +395,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             p => new PendingPairingViewModel(p, server.Pairing), (vm, p) => vm.Update(p));
 
         HasNoDevices = Devices.Count == 0;
+        // Im Assistenten: sobald das erste Gerät gekoppelt ist, zum Abschluss-Schritt springen
+        if (ShowSetup && SetupStep == 2 && Devices.Count > 0)
+            SetupStep = 3;
         Apps.SyncDevices();
         Remote.SyncDevices();
         Actions.SyncDevices();
