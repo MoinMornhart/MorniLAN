@@ -15,6 +15,7 @@ internal sealed class SunshineReadinessService(
     Func<bool>? isGameRunning = null,
     Func<CancellationToken, Task<bool>>? install = null,
     bool? canInstall = null,
+    Action? configure = null,
     TimeProvider? time = null) : BackgroundService
 {
     private static readonly TimeSpan InitialDelay = TimeSpan.FromMinutes(3);
@@ -24,6 +25,8 @@ internal sealed class SunshineReadinessService(
     private readonly Func<bool> _isGameRunning = isGameRunning ?? SteamActivity.IsGameRunning;
     private readonly Func<CancellationToken, Task<bool>> _install = install ?? SunshineInstaller.InstallAsync;
     private readonly bool _canInstall = canInstall ?? WindowsServiceHelpers.IsWindowsService();
+    // Nach erfolgreicher Installation Sunshine fertig einrichten (API-Zugangsdaten setzen), damit die Kopplung sofort geht.
+    private readonly Action _configure = configure ?? (() => SunshineConfigurator.Shared.EnsureCredentials());
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -49,7 +52,10 @@ internal sealed class SunshineReadinessService(
     internal async Task<bool> TryEnsureAsync(CancellationToken cancellationToken)
     {
         if (_installed())
+        {
+            _configure(); // bereits installiert – sicherstellen, dass die API-Zugangsdaten gesetzt sind (idempotent)
             return true;
+        }
         if (!isPaired())
             return false; // Erst wenn gekoppelt – ohne Admin macht Fernzugriff keinen Sinn
         if (_isGameRunning())
@@ -60,6 +66,7 @@ internal sealed class SunshineReadinessService(
         {
             if (await _install(cancellationToken) && _installed())
             {
+                _configure(); // Zugangsdaten für die automatische PIN-Kopplung setzen (einmalig)
                 logger.LogInformation("Sunshine ist eingerichtet – der Fernzugriff ist bereit.");
                 return true;
             }

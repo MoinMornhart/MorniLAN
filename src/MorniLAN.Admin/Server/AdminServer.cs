@@ -215,6 +215,10 @@ public sealed class AdminServer : IAsyncDisposable
 
     public async Task<bool> StopRemoteAsync(Guid deviceId) => await SendRemote(deviceId, c => c.OnStopRemote());
 
+    /// <summary>Die in Moonlight angezeigte PIN an den PC schicken, der die Kopplung über Sunshine automatisch annimmt.</summary>
+    public async Task<bool> PairRemoteAsync(Guid deviceId, string pin) =>
+        await SendRemote(deviceId, c => c.OnRemotePair(pin));
+
     public async Task<bool> SetInputLockAsync(Guid deviceId, bool locked) =>
         await SendRemote(deviceId, c => c.OnSetInputLock(locked));
 

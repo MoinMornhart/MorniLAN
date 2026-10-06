@@ -29,6 +29,7 @@ public sealed partial class RemoteViewModel : ObservableObject
     [ObservableProperty] public partial bool InputLocked { get; set; }
     [ObservableProperty] public partial string MoonlightHint { get; set; } = "";
     [ObservableProperty] public partial bool MoonlightMissing { get; set; }
+    [ObservableProperty] public partial string Pin { get; set; } = "";
     private string? _moonlightStartedFor;
 
     partial void OnSelectedDeviceChanged(DeviceChoice? value)
@@ -139,6 +140,25 @@ public sealed partial class RemoteViewModel : ObservableObject
         {
             MoonlightHint = "Moonlight-Installer ließ sich nicht starten. Bitte Moonlight von moonlight-stream.org installieren.";
         }
+    }
+
+    /// <summary>Die in Moonlight angezeigte PIN an den PC schicken – der koppelt dann automatisch (nur beim ersten Mal nötig).</summary>
+    [RelayCommand]
+    private async Task PairAsync()
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+            return;
+        var pin = new string((Pin ?? "").Where(char.IsDigit).ToArray());
+        if (pin.Length != 4)
+        {
+            MoonlightHint = "Bitte die vierstellige PIN eingeben, die Moonlight anzeigt.";
+            return;
+        }
+        if (await server.PairRemoteAsync(device.Id, pin))
+            MoonlightHint = "PIN gesendet – der PC koppelt automatisch. Gleich startet das Bild.";
+        else
+            MoonlightHint = "Der PC ist gerade nicht erreichbar.";
+        Pin = "";
     }
 
     [RelayCommand]

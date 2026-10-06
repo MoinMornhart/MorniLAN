@@ -153,6 +153,7 @@ internal sealed class AdminConnectionService(
         });
         connection.On<bool>(nameof(IAgentClient.OnStartRemote), allow => remote?.Start(allow));
         connection.On(nameof(IAgentClient.OnStopRemote), () => remote?.Stop());
+        connection.On<string>(nameof(IAgentClient.OnRemotePair), pin => remote?.Pair(pin));
         connection.On<bool>(nameof(IAgentClient.OnSetInputLock), locked => remote?.SetInputLock(locked));
         connection.On<AdminCommand>(nameof(IAgentClient.OnRunCommand), async command =>
         {

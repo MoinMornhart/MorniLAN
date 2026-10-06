@@ -570,6 +570,20 @@
               <TextBlock Text="{Binding Remote.MoonlightHint}" FontWeight="SemiBold" TextWrapping="Wrap"
                          IsVisible="{Binding Remote.IsActive}" />
 
+              <!-- Einmalige Kopplung: PIN aus Moonlight hier eingeben, der PC nimmt sie automatisch an (kein Browser nötig) -->
+              <Border Classes="card" IsVisible="{Binding Remote.IsActive}" Padding="14">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="Beim allerersten Verbinden fragt Moonlight nach einer Kopplung und zeigt eine 4-stellige PIN. Diese PIN hier eingeben:"
+                             Classes="muted" FontSize="12" TextWrapping="Wrap" />
+                  <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBox Text="{Binding Remote.Pin}" Watermark="z. B. 1234" MaxLength="4" Width="120"
+                             FontSize="18" />
+                    <Button Content="Koppeln" Classes="accent" Command="{Binding Remote.PairCommand}"
+                            VerticalAlignment="Stretch" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button Content="Verbinden" Classes="accent" Command="{Binding Remote.ConnectCommand}"
                         IsVisible="{Binding Remote.CanConnect}" />

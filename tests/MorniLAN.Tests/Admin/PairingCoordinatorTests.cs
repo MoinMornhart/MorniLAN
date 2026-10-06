@@ -155,6 +155,8 @@ public sealed class PairingCoordinatorTests : IDisposable
 
         public Task OnStopRemote() => Task.CompletedTask;
 
+        public Task OnRemotePair(string pin) => Task.CompletedTask;
+
         public Task OnSetInputLock(bool locked) => Task.CompletedTask;
 
         public Task OnRunCommand(MorniLAN.Shared.Models.AdminCommand command) => Task.CompletedTask;

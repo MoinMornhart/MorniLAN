@@ -125,6 +125,13 @@ public interface IAgentClient
     /// <summary>Der Admin beendet die Fernzugriffs-Sitzung.</summary>
     Task OnStopRemote();
 
+    /// <summary>
+    /// Der Admin gibt die in Moonlight angezeigte Kopplungs-PIN ein; der PC nimmt sie über Sunshine automatisch an
+    /// (keine Web-Oberfläche nötig). Panels/Agenten vor dieser Version kennen die Methode nicht – dann entfällt sie
+    /// einfach, der ältere Weg (PIN im Sunshine-Browser) bleibt möglich.
+    /// </summary>
+    Task OnRemotePair(string pin);
+
     /// <summary>Maus und Tastatur des Freundes während der Sitzung sperren oder freigeben.</summary>
     Task OnSetInputLock(bool locked);
 

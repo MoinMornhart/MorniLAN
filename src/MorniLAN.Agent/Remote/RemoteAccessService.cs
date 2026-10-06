@@ -20,6 +20,7 @@ internal sealed class RemoteAccessService(
     Func<bool>? sunshineInstalled = null,
     Func<string?>? hostAddress = null,
     Func<CancellationToken, Task<bool>>? installSunshine = null,
+    Func<string, string, CancellationToken, Task<bool>>? acceptPin = null,
     TimeProvider? time = null)
 {
     private static readonly TimeSpan ConsentTimeout = TimeSpan.FromSeconds(60);
@@ -28,6 +29,9 @@ internal sealed class RemoteAccessService(
     private readonly Func<bool> _sunshineInstalled = sunshineInstalled ?? SunshineControl.IsInstalled;
     private readonly Func<string?> _hostAddress = hostAddress ?? DefaultHost;
     private readonly Func<CancellationToken, Task<bool>> _installSunshine = installSunshine ?? SunshineInstaller.InstallAsync;
+    // (pin, Gerätename) → angenommen? Standard: Sunshines lokale API (ersetzt die Hand-Eingabe im Browser)
+    private readonly Func<string, string, CancellationToken, Task<bool>> _acceptPin =
+        acceptPin ?? SunshineConfigurator.Shared.AcceptPinAsync;
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly Lock _lock = new();
 
@@ -86,6 +90,52 @@ internal sealed class RemoteAccessService(
         {
             Set(new RemoteSessionState(RemoteSessionPhase.Denied, false, null, "Der Freund hat abgelehnt.", _time.GetUtcNow()));
             logger.LogInformation("Fernzugriff vom Freund abgelehnt");
+        }
+    }
+
+    /// <summary>
+    /// Der Admin hat die in Moonlight angezeigte PIN eingegeben. Der PC nimmt die Kopplung über Sunshines lokale API
+    /// an – ganz ohne Web-Oberfläche. Läuft nebenher; das Ergebnis erscheint als Hinweis im Panel. Nur während einer
+    /// laufenden Sitzung sinnvoll (Moonlight zeigt die PIN erst beim Verbinden).
+    /// </summary>
+    public void Pair(string pin)
+    {
+        lock (_lock)
+        {
+            if (_state.Phase != RemoteSessionPhase.Active)
+                return;
+        }
+        _ = PairAsync(pin);
+    }
+
+    private async Task PairAsync(string pin)
+    {
+        bool accepted;
+        try
+        {
+            accepted = await _acceptPin(pin, Environment.MachineName, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning("Kopplung (PIN) fehlgeschlagen: {Error}", ex.Message);
+            accepted = false;
+        }
+
+        RemoteSessionState? updated = null;
+        lock (_lock)
+        {
+            if (_state.Phase == RemoteSessionPhase.Active)
+                updated = _state = _state with
+                {
+                    Message = accepted
+                        ? "Gekoppelt ✓ – Moonlight verbindet jetzt automatisch."
+                        : "PIN stimmte nicht. In Moonlight eine neue PIN holen und erneut eingeben.",
+                };
+        }
+        if (updated is not null)
+        {
+            logger.LogInformation("Kopplung per PIN {Result}", accepted ? "angenommen" : "abgelehnt");
+            StateChanged?.Invoke(updated);
         }
     }
 

@@ -16,7 +16,13 @@ internal static class SunshineControl
     /// <summary>Standard-Port, auf dem Moonlight Sunshine findet (HTTPS-Kopplung).</summary>
     public const int MoonlightPort = 47989;
 
+    /// <summary>Port von Sunshines lokaler Web-/API-Oberfläche (HTTPS, selbstsigniert). Darüber nehmen wir die PIN an.</summary>
+    public const int ApiPort = 47990;
+
     public static bool IsInstalled() => ServiceExists() || FindExecutable() is not null;
+
+    /// <summary>Pfad zu sunshine.exe, falls installiert (für das automatische Einrichten der Zugangsdaten).</summary>
+    public static string? ExecutablePath => FindExecutable();
 
     /// <summary>Stellt sicher, dass Sunshine läuft. true, wenn es (jetzt) läuft.</summary>
     public static bool EnsureRunning()
@@ -50,6 +56,33 @@ internal static class SunshineControl
             }
         }
         return IsProcessRunning();
+    }
+
+    /// <summary>
+    /// Startet den Sunshine-Dienst einmal neu, damit frisch gesetzte Zugangsdaten übernommen werden. Nur wenn der
+    /// Dienst existiert; sonst wird (best effort) sichergestellt, dass Sunshine läuft. Fehler werden geschluckt.
+    /// </summary>
+    public static void RestartService()
+    {
+        if (!ServiceExists())
+        {
+            EnsureRunning();
+            return;
+        }
+        try
+        {
+            using var service = new ServiceController(ServiceName);
+            if (service.Status is ServiceControllerStatus.Running or ServiceControllerStatus.StartPending)
+            {
+                service.Stop();
+                service.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(10));
+            }
+            service.Start();
+            service.WaitForStatus(ServiceControllerStatus.Running, TimeSpan.FromSeconds(10));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ServiceProcess.TimeoutException)
+        {
+        }
     }
 
     private static bool ServiceExists() =>
