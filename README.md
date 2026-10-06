@@ -1,16 +1,23 @@
 <p align="center">
-  <img src="assets/mornilan-256.png" width="96" alt="MorniLAN-Logo">
+  <img src="assets/mornilan-256.png" width="112" alt="MorniLAN-Logo">
 </p>
 
 <h1 align="center">MorniLAN</h1>
 
 <p align="center">
-  <b>Ein Windows-PC für Freunde und Familie: aufgeräumt, sicher und bequem aus der Ferne verwaltet.</b>
+  <b>Ein Windows-PC für Freunde und Familie –<br>aufgeräumt, sicher und bequem aus der Ferne verwaltet.</b>
 </p>
 
 <p align="center">
-  <a href="https://github.com/MoinMornhart/MorniLAN/releases"><img src="https://img.shields.io/github/v/release/MoinMornhart/MorniLAN?include_prereleases&label=Version" alt="Neueste Version"></a>
+  🎮 Launcher statt Desktop &nbsp;·&nbsp; 🔒 Sperren je Konto &nbsp;·&nbsp; 📺 Fernzugriff mit Zustimmung &nbsp;·&nbsp; 🔄 Updates von selbst
+</p>
+
+<p align="center">
+  <a href="https://github.com/MoinMornhart/MorniLAN/releases"><img src="https://img.shields.io/github/v/release/MoinMornhart/MorniLAN?include_prereleases&label=Version&color=4C8DFF" alt="Neueste Version"></a>
+  <a href="https://github.com/MoinMornhart/MorniLAN/releases"><img src="https://img.shields.io/github/downloads/MoinMornhart/MorniLAN/total?label=Downloads&color=1F9D57" alt="Downloads"></a>
   <a href="https://github.com/MoinMornhart/MorniLAN/actions/workflows/ci.yml"><img src="https://github.com/MoinMornhart/MorniLAN/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI"></a>
+  <img src="https://img.shields.io/badge/Plattform-Windows%2010%2F11-0078D6?logo=windows&logoColor=white" alt="Plattform: Windows 10/11">
+  <img src="https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white" alt=".NET 10">
   <a href="LICENSE"><img src="https://img.shields.io/badge/Lizenz-MIT-blue.svg" alt="Lizenz: MIT"></a>
 </p>
 
@@ -24,6 +31,14 @@ einen aufgeräumten **Launcher** mit seinen Spielen und Apps. Du siehst und steu
 was installiert ist, was er starten darf, ob der PC läuft, und auf Wunsch per Fernzugriff auch seinen Bildschirm.
 Das klappt im selben Heimnetz oder von unterwegs über [Tailscale](https://tailscale.com), ohne Cloud-Dienst und ohne
 Portfreigaben am Router.
+
+<table align="center">
+  <tr>
+    <td align="center" width="240">🎮<br><b>Launcher statt Desktop</b><br><sub>Spiele & Apps als Kacheln,<br>Controller-tauglich</sub></td>
+    <td align="center" width="240">🔒<br><b>Du behältst die Kontrolle</b><br><sub>Freigaben & Sperren je Konto,<br>Notfall-Entsperrung</sub></td>
+    <td align="center" width="240">📡<br><b>Ohne Cloud</b><br><sub>direkt im Heimnetz oder über<br>Tailscale, TLS-verschlüsselt</sub></td>
+  </tr>
+</table>
 
 <p align="center">
   <img src="docs/images/freigaben.jpg" width="860" alt="Admin-Panel, Seite Freigaben: Spiele aus Steam, Epic, GOG, Ubisoft, EA und Battle.net als Cover-Kacheln">
@@ -88,18 +103,21 @@ Alle Funktionen Schritt für Schritt erklärt: [**Admin-Handbuch**](docs/handbuc
 ## Was MorniLAN kann
 
 | | Funktion | Stand |
-|---|---|---|
-| 🔗 | **Finden und koppeln:** PCs im Heimnetz finden sich automatisch, gekoppelt wird mit einem Code, danach erkennen sich beide an ihrem Zertifikat | ✅ fertig |
-| 📊 | **Übersicht:** online/offline, CPU, Arbeitsspeicher, Laufwerk | ✅ fertig |
-| 🎮 | **Spiele und Programme erkennen:** Steam, Epic Games, GOG, Ubisoft Connect, EA app, Battle.net, Microsoft Store und alle installierten Programme, mit Covern und Icons. Systemkomponenten werden ausgeblendet | ✅ in der Beta |
-| 🔄 | **Automatische Updates:** Das Panel bietet neue Versionen an, die PCs aktualisieren sich selbst, aber nie mitten im Spiel | ✅ in der Beta |
-| ✅ | **Freigaben:** per Schalter festlegen, was im Launcher erscheint (Standard: alles frei), eigene Einträge für Programme, die MorniLAN nicht selbst findet | ✅ in der Beta |
-| 🖥️ | **Launcher wie eine Konsole:** startet bei der Anmeldung im Vollbild, „Wer spielt?“ mit Profilen, Suche, „Zuletzt gespielt“, Leiste mit Uhr, Ton und WLAN, Bedienung auch mit dem Controller | ✅ in der Beta |
-| 🎨 | **Profile gestalten:** jeder richtet sein Profil selbst ein – Farbe, Gaming-Hintergrund, eigenes Bild, Avatar, und ein optionales Passwort für die Profilauswahl | ✅ in der Beta |
-| 🔒 | **Windows-Sperren:** je Konto wählen, ob es eingeschränkt wird (Admin-Konten nie); Einstellungen, Konsole, Registry, Task-Manager und Installieren sperrbar, mit Notfall-Entsperrung am PC | ✅ in der Beta |
-| 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen (Sunshine + Moonlight). Immer sichtbar am PC, mit Erlauben/Ablehnen und Maus/Tastatur-Sperre | ✅ Steuerung in der Beta |
-| 🙋 | **Hilfe anfordern:** ein Knopf im Launcher, du bekommst sofort einen Hinweis im Panel | ✅ in der Beta |
-| 🛠️ | **Aktionen:** Programme per winget installieren/deinstallieren oder aus einer Adresse, Nachricht schicken, Neustart/Herunterfahren | ✅ in der Beta |
+|:--:|---|:--:|
+| 🔗 | **Finden und koppeln:** PCs im Heimnetz finden sich automatisch, gekoppelt wird mit einem Code, danach erkennen sich beide an ihrem Zertifikat | ✅ Beta |
+| 📊 | **Übersicht:** online/offline, CPU, Arbeitsspeicher, Laufwerk | ✅ Beta |
+| 🎮 | **Spiele und Programme erkennen:** Steam, Epic Games, GOG, Ubisoft Connect, EA app, Battle.net, Microsoft Store und alle installierten Programme, mit Covern und Icons. Systemkomponenten werden ausgeblendet | ✅ Beta |
+| 🧹 | **Aufräumen:** unnötige Apps (Laufzeiten, Treiber, Zubehör) erkennt MorniLAN selbst und blendet sie auf einen Klick aus – umkehrbar, nicht gesperrt | ✅ Beta |
+| ✅ | **Freigaben:** per Schalter festlegen, was im Launcher erscheint (Standard: alles frei), eigene Einträge für Programme, die MorniLAN nicht selbst findet | ✅ Beta |
+| 🖥️ | **Launcher wie eine Konsole:** startet bei der Anmeldung im Vollbild, „Wer spielt?“ mit Profilen, Suche, „Zuletzt gespielt“, Leiste mit Uhr, Ton und WLAN, Bedienung auch mit dem Controller | ✅ Beta |
+| 🪟 | **Launcher als echter Desktop:** je Konto wird der Launcher zur Windows-Shell – kein Desktop, keine Taskleiste, kein Entkommen (Admin-Konto nie) | ✅ Beta |
+| 🎨 | **Profile gestalten:** jeder richtet sein Profil selbst ein – Farbe, Gaming-Hintergrund, eigenes Bild, Avatar, und ein optionales Passwort für die Profilauswahl | ✅ Beta |
+| 🔒 | **Windows-Sperren:** je Konto wählen, ob es eingeschränkt wird (Admin-Konten nie); Einstellungen, Konsole, Registry, Task-Manager und Installieren sperrbar, mit Notfall-Entsperrung am PC | ✅ Beta |
+| 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen (Sunshine + Moonlight, bei Bedarf automatisch eingerichtet). Immer sichtbar am PC, mit Erlauben/Ablehnen und Maus/Tastatur-Sperre | ✅ Beta · Steuerung |
+| 🛠️ | **Aktionen:** Programme per winget installieren/deinstallieren oder aus einer Adresse, Nachricht schicken, Neustart/Herunterfahren | ✅ Beta |
+| 🔄 | **Automatische Updates:** Panel und PCs aktualisieren sich selbst (nie mitten im Spiel), mit Prüfsumme und Selbstheilung | ✅ Beta |
+| 🧭 | **Einrichtungs-Assistent:** führt beim ersten Start durch Firewall und erstes Pairing | ✅ Beta |
+| 🙋 | **Hilfe anfordern:** ein Knopf im Launcher, du bekommst sofort einen Hinweis im Panel | ✅ Beta |
 
 ### Updates
 
