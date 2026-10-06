@@ -10,7 +10,12 @@ public sealed record LocalAccount(string Sid, string Name, bool IsAdministrator)
 /// <param name="RestrictedAccountCount">Wie viele Konten gerade eingeschränkt sind.</param>
 /// <param name="AppControlMode">"off", "audit" (nur protokollieren) oder "enforce" (scharf).</param>
 /// <param name="Message">Hinweis für das Panel, z. B. ein Fehler oder dass App Control einen Neustart braucht.</param>
-public sealed record RestrictionState(bool Applied, int RestrictedAccountCount, string AppControlMode, string Message)
+/// <param name="KioskAccountCount">
+/// Wie viele Konten den Launcher als Desktop (Shell-Ersatz) nutzen. Eigenes, nachträglich ergänztes Feld mit
+/// Standardwert 0, damit ein älteres Panel es einfach übergeht.
+/// </param>
+public sealed record RestrictionState(bool Applied, int RestrictedAccountCount, string AppControlMode, string Message,
+    int KioskAccountCount = 0)
 {
     public static readonly RestrictionState Idle = new(true, 0, "off", "");
 }

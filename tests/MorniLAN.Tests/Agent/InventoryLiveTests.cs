@@ -226,6 +226,12 @@ public class InventoryLiveTests
         new MorniLAN.Admin.Server.DeviceRegistry(target).Add(
             new MorniLAN.Admin.Server.PairedDevice(deviceId, Environment.MachineName + " (Vorschau)", new string('0', 64), DateTimeOffset.UtcNow));
         store.Save(deviceId, report);
+        // Beispiel-Konten, damit die Konten-Karten (mit Einschränken- und Kiosk-Schalter) in der Vorschau erscheinen
+        new MorniLAN.Admin.Server.DeviceAccountStore(target).Save(deviceId,
+        [
+            new MorniLAN.Shared.Models.LocalAccount("S-1-5-21-vorschau-1001", "Freund", false),
+            new MorniLAN.Shared.Models.LocalAccount("S-1-5-21-vorschau-500", "Chef (du)", true),
+        ]);
         var saved = 0;
         foreach (var hash in store.MissingImages(report))
             if (service.GetImage(hash) is { } image && store.TrySaveImage(image))

@@ -50,16 +50,31 @@ public sealed record AppPolicy(
     ProfileRuleSet[]? ProfileRules = null,
     bool BlockProfileCreation = false,
     string[]? RestrictedAccounts = null,
-    string[]? BlockedAreas = null)
+    string[]? BlockedAreas = null,
+    string[]? KioskAccounts = null)
 {
     /// <summary>Wird dieses Windows-Konto eingeschränkt? (SID; Administratorkonten prüft der Agent zusätzlich.)</summary>
     public bool IsRestricted(string sid) => (RestrictedAccounts ?? []).Contains(sid, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Läuft der MorniLAN-Launcher in diesem Konto als Desktop (Shell-Ersatz statt explorer.exe)? Nutzer-Wunsch
+    /// 2026-10-06: „wirklich der Desktop“, damit man nicht herauskommt. Eigenes Feld (nicht in BlockedAreas), damit
+    /// ein älteres Panel das einfach übergeht. Administratorkonten prüft der Agent zusätzlich und bleiben nie Kiosk.
+    /// </summary>
+    public bool IsKiosk(string sid) => (KioskAccounts ?? []).Contains(sid, StringComparer.OrdinalIgnoreCase);
 
     public AppPolicy WithRestrictedAccount(string sid, bool restricted, DateTimeOffset now) =>
         Next(now) with
         {
             RestrictedAccounts = [.. (RestrictedAccounts ?? []).Where(s => !string.Equals(s, sid, StringComparison.OrdinalIgnoreCase)),
                 .. restricted ? [sid] : Array.Empty<string>()],
+        };
+
+    public AppPolicy WithKioskAccount(string sid, bool kiosk, DateTimeOffset now) =>
+        Next(now) with
+        {
+            KioskAccounts = [.. (KioskAccounts ?? []).Where(s => !string.Equals(s, sid, StringComparison.OrdinalIgnoreCase)),
+                .. kiosk ? [sid] : Array.Empty<string>()],
         };
 
     public AppPolicy WithBlockedArea(string area, bool blocked, DateTimeOffset now) =>

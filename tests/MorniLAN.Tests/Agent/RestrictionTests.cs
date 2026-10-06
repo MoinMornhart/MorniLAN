@@ -75,11 +75,97 @@ public sealed class RestrictionTests : IDisposable
         Assert.True(RestrictionPlan.IsAccountRestricted(policy, "S-1-5-21-admin", isAdministrator: false));
     }
 
+    // ───── Kiosk / Desktop-Ersatz ─────
+
+    [Fact]
+    public void Kiosk_InPolicy_TogglesAndSurvivesOldJson()
+    {
+        var policy = AppPolicy.Default.WithKioskAccount("S-1-5-21-100", true, T0);
+        Assert.True(policy.IsKiosk("S-1-5-21-100"));
+        Assert.False(policy.IsKiosk("S-1-5-21-200"));
+        Assert.False(policy.WithKioskAccount("S-1-5-21-100", false, T0).IsKiosk("S-1-5-21-100"));
+
+        // Älteres Panel/alte Datei ohne das Feld: niemand ist Kiosk.
+        const string old = """{"revision":1,"allowByDefault":true,"rules":[],"customApps":[],"updatedAt":"2026-10-06T05:00:00+00:00"}""";
+        var loaded = System.Text.Json.JsonSerializer.Deserialize(old, MorniLAN.Shared.Serialization.MorniLanJsonContext.Default.AppPolicy)!;
+        Assert.False(loaded.IsKiosk("S-1-5-21-100"));
+    }
+
+    [Fact]
+    public void Administrators_AreNeverKiosk()
+    {
+        var policy = AppPolicy.Default.WithKioskAccount("S-1-5-21-admin", true, T0);
+        Assert.False(RestrictionPlan.IsAccountKiosk(policy, "S-1-5-21-admin", isAdministrator: true));
+        Assert.True(RestrictionPlan.IsAccountKiosk(policy, "S-1-5-21-admin", isAdministrator: false));
+    }
+
+    [Theory]
+    [InlineData("\"C:\\Program Files\\MorniLAN\\Launcher\\MorniLAN.Launcher.exe\" --autostart", @"C:\Program Files\MorniLAN\Launcher\MorniLAN.Launcher.exe")]
+    [InlineData(@"C:\MorniLAN\Launcher.exe --autostart", @"C:\MorniLAN\Launcher.exe")]
+    [InlineData(@"C:\MorniLAN\Launcher.exe", @"C:\MorniLAN\Launcher.exe")]
+    [InlineData("   ", null)]
+    public void KioskShell_ExtractsExecutablePath(string command, string? expected) =>
+        Assert.Equal(expected, KioskShell.ExtractExecutable(command));
+
+    [Fact]
+    public async Task Kiosk_SetsShellForFriend_NotForAdmin()
+    {
+        var policy = AppPolicy.Default.WithKioskAccount(Freund.Sid, true, T0);
+        var shell = new List<(string, string?)>();
+        var service = NewService(policy, [], [], [Freund, Admin], shellFor: shell);
+
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await cts.CancelAsync();
+        await service.StopAsync(CancellationToken.None);
+
+        // Freund bekommt den Launcher als Shell, Admin wird aktiv auf den normalen Desktop zurückgesetzt.
+        Assert.Contains(shell, s => s.Item1 == Freund.Sid && s.Item2 == "\"C:\\MorniLAN\\Launcher.exe\" --shell");
+        Assert.Contains(shell, s => s.Item1 == Admin.Sid && s.Item2 is null);
+        Assert.Equal(1, service.State.KioskAccountCount);
+    }
+
+    [Fact]
+    public async Task Kiosk_WhenLauncherMissing_StaysOff_AndWarns()
+    {
+        var policy = AppPolicy.Default.WithKioskAccount(Freund.Sid, true, T0);
+        var shell = new List<(string, string?)>();
+        var service = NewService(policy, [], [], [Freund], shellFor: shell, launcherCommand: null);
+
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await cts.CancelAsync();
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(shell, s => s.Item2 is not null); // niemals eine kaputte Shell setzen
+        Assert.Equal(0, service.State.KioskAccountCount);
+        Assert.Contains("nicht gefunden", service.State.Message);
+    }
+
+    [Fact]
+    public async Task Kiosk_WhenPaused_RestoresNormalDesktop()
+    {
+        var policy = AppPolicy.Default.WithKioskAccount(Freund.Sid, true, T0);
+        var shell = new List<(string, string?)>();
+        var service = NewService(policy, [], [], [Freund], paused: true, shellFor: shell);
+
+        using var cts = new CancellationTokenSource();
+        await service.StartAsync(cts.Token);
+        await Task.Delay(100, TestContext.Current.CancellationToken);
+        await cts.CancelAsync();
+        await service.StopAsync(CancellationToken.None);
+
+        Assert.Contains(shell, s => s.Item1 == Freund.Sid && s.Item2 is null); // Notfall-Entsperrung: Desktop zurück
+    }
+
     // ───── Prozess-Wächter ─────
 
     private RestrictionService NewService(AppPolicy policy, List<int> killed,
         IEnumerable<ProcessOwnership.RunningProcess> processes, LocalAccount[] accounts, bool paused = false,
-        List<string>? writtenFor = null, List<string>? clearedFor = null)
+        List<string>? writtenFor = null, List<string>? clearedFor = null,
+        List<(string Sid, string? Command)>? shellFor = null, string? launcherCommand = "\"C:\\MorniLAN\\Launcher.exe\" --shell")
     {
         var store = new AgentPolicyStore(_dir.Path);
         store.Apply(policy, authoritative: true);
@@ -89,7 +175,9 @@ public sealed class RestrictionTests : IDisposable
             terminate: killed.Add,
             enumerate: () => processes,
             scanAccounts: () => accounts,
-            isPaused: () => paused);
+            isPaused: () => paused,
+            setShell: (sid, cmd) => shellFor?.Add((sid, cmd)),
+            resolveShell: () => launcherCommand);
     }
 
     private static readonly LocalAccount Freund = new("S-1-5-21-100", "Freund", false);

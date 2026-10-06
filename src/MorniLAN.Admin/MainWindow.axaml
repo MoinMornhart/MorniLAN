@@ -327,15 +327,25 @@
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:AccountRowViewModel">
-                    <Border Background="#15181E" CornerRadius="10" Padding="12,10" Margin="0,0,10,10" MinWidth="220">
-                      <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel VerticalAlignment="Center">
-                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
-                          <TextBlock Text="{Binding Role}" Classes="label" />
-                        </StackPanel>
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsRestricted}" IsEnabled="{Binding CanRestrict}"
-                                      OnContent="eingeschränkt" OffContent="normal" />
-                      </Grid>
+                    <Border Background="#15181E" CornerRadius="10" Padding="12,10" Margin="0,0,10,10" MinWidth="240">
+                      <StackPanel Spacing="8">
+                        <Grid ColumnDefinitions="*,Auto">
+                          <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            <TextBlock Text="{Binding Role}" Classes="label" />
+                          </StackPanel>
+                          <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsRestricted}" IsEnabled="{Binding CanRestrict}"
+                                        OnContent="eingeschränkt" OffContent="normal" />
+                        </Grid>
+                        <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding CanRestrict}">
+                          <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Launcher als Desktop" />
+                            <TextBlock Text="kein Windows-Desktop, kein Entkommen" Classes="label" />
+                          </StackPanel>
+                          <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsKiosk}" IsEnabled="{Binding CanRestrict}"
+                                        OnContent="Desktop" OffContent="aus" />
+                        </Grid>
+                      </StackPanel>
                     </Border>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
