@@ -15,6 +15,7 @@ internal static class UserPolicyWriter
     private const string System = @"Software\Microsoft\Windows\CurrentVersion\Policies\System";
     private const string CmdPolicy = @"Software\Policies\Microsoft\Windows\System";
     private const string StorePolicy = @"Software\Policies\Microsoft\WindowsStore";
+    private const string Winlogon = @"Software\Microsoft\Windows NT\CurrentVersion\Winlogon";
 
     /// <summary>Setzt genau die Richtlinien der gesperrten Bereiche; nicht gesperrte Bereiche werden entfernt.</summary>
     public static void Apply(string sid, IReadOnlySet<string> blockedAreas)
@@ -32,6 +33,30 @@ internal static class UserPolicyWriter
 
     /// <summary>Entfernt alle von MorniLAN gesetzten Richtlinien (Konto nicht mehr eingeschränkt, Notfall-Entsperrung).</summary>
     public static void Clear(string sid) => Apply(sid, new HashSet<string>());
+
+    /// <summary>
+    /// Macht den Launcher zum Desktop des Kontos: setzt die benutzereigene Shell (Winlogon\Shell). Windows nimmt
+    /// diesen Wert statt explorer.exe – kein Startmenü, keine Taskleiste. <paramref name="shellCommand"/> null
+    /// entfernt den Wert wieder, dann startet beim nächsten Anmelden wieder der normale Windows-Desktop.
+    /// Wirkt bei der nächsten Anmeldung des Kontos (eine laufende Sitzung bleibt, bis man sich neu anmeldet).
+    /// </summary>
+    public static void SetShell(string sid, string? shellCommand) =>
+        WithUserHive(sid, root =>
+        {
+            if (string.IsNullOrWhiteSpace(shellCommand))
+            {
+                using var key = root.OpenSubKey(Winlogon, writable: true);
+                key?.DeleteValue("Shell", throwOnMissingValue: false);
+            }
+            else
+            {
+                using var key = root.CreateSubKey(Winlogon);
+                key.SetValue("Shell", shellCommand, RegistryValueKind.String);
+            }
+        });
+
+    /// <summary>Stellt in diesem Konto wieder den normalen Windows-Desktop her (explorer.exe).</summary>
+    public static void ClearShell(string sid) => SetShell(sid, null);
 
     private static void Set(RegistryKey root, string path, string name, bool on, int onValue = 1)
     {

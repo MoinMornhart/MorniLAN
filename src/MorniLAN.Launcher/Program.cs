@@ -13,12 +13,22 @@ internal static class Program
     public const string FullscreenArgument = "--fullscreen";
     public const string WindowedArgument = "--windowed";
 
+    /// <summary>
+    /// Der Launcher ist der Desktop des Kontos (Shell-Ersatz, von Winlogon\Shell gestartet). Dann gibt es keinen
+    /// Windows-Desktop dahinter – also immer Vollbild und von Windows neu starten lassen, falls er abstürzt.
+    /// </summary>
+    public const string ShellArgument = "--shell";
+
     internal static bool Fullscreen { get; private set; }
+
+    /// <summary>Läuft als Desktop des Kontos (siehe <see cref="ShellArgument"/>).</summary>
+    internal static bool IsShell { get; private set; }
 
     [STAThread]
     public static int Main(string[] args)
     {
         var admin = UserAccount.IsAdministrator();
+        IsShell = args.Contains(ShellArgument);
         // Das eigene Admin-Konto bleibt ein normaler Windows-Desktop: dort startet der Launcher nicht von selbst
         if (args.Contains(AutostartArgument) && admin)
             return 0;
@@ -28,10 +38,10 @@ internal static class Program
         if (!first)
             return 0;
 
-        Fullscreen = args.Contains(FullscreenArgument) || (!admin && !args.Contains(WindowedArgument));
+        Fullscreen = IsShell || args.Contains(FullscreenArgument) || (!admin && !args.Contains(WindowedArgument));
 
-        // Wenn das Geräte-Setup für ein Update den Launcher schließt, öffnet Windows ihn danach wieder.
-        RegisterApplicationRestart(Fullscreen ? FullscreenArgument : null, 0);
+        // Als Desktop immer neu starten lassen; sonst nur, wenn das Geräte-Setup ihn fürs Update kurz schließt.
+        RegisterApplicationRestart(IsShell ? ShellArgument : Fullscreen ? FullscreenArgument : null, 0);
         return BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

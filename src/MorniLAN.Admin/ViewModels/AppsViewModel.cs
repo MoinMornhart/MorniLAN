@@ -27,14 +27,18 @@ public sealed record ScopeChoice(string? ProfileId, string Name)
 public sealed partial class AccountRowViewModel : ObservableObject
 {
     private readonly Action<AccountRowViewModel, bool> _setRestricted;
+    private readonly Action<AccountRowViewModel, bool> _setKiosk;
     private bool _syncing;
 
-    public AccountRowViewModel(LocalAccount account, bool restricted, Action<AccountRowViewModel, bool> setRestricted)
+    public AccountRowViewModel(LocalAccount account, bool restricted, bool kiosk,
+        Action<AccountRowViewModel, bool> setRestricted, Action<AccountRowViewModel, bool> setKiosk)
     {
         Account = account;
         _setRestricted = setRestricted;
+        _setKiosk = setKiosk;
         _syncing = true;
         IsRestricted = restricted && !account.IsAdministrator;
+        IsKiosk = kiosk && !account.IsAdministrator;
         _syncing = false;
     }
 
@@ -45,16 +49,26 @@ public sealed partial class AccountRowViewModel : ObservableObject
 
     [ObservableProperty] public partial bool IsRestricted { get; set; }
 
+    /// <summary>Launcher als Desktop (Shell-Ersatz) für dieses Konto.</summary>
+    [ObservableProperty] public partial bool IsKiosk { get; set; }
+
     partial void OnIsRestrictedChanged(bool value)
     {
         if (!_syncing)
             _setRestricted(this, value);
     }
 
-    internal void Sync(bool restricted)
+    partial void OnIsKioskChanged(bool value)
+    {
+        if (!_syncing)
+            _setKiosk(this, value);
+    }
+
+    internal void Sync(bool restricted, bool kiosk)
     {
         _syncing = true;
         IsRestricted = restricted && !Account.IsAdministrator;
+        IsKiosk = kiosk && !Account.IsAdministrator;
         _syncing = false;
     }
 }
@@ -262,7 +276,8 @@ public sealed partial class AppsViewModel : ObservableObject
             }
             var policy = server.Policies.Get(device.Id);
             foreach (var account in server.Accounts.Get(device.Id))
-                Accounts.Add(new AccountRowViewModel(account, policy.IsRestricted(account.Sid), SetRestricted));
+                Accounts.Add(new AccountRowViewModel(account, policy.IsRestricted(account.Sid), policy.IsKiosk(account.Sid),
+                    SetRestricted, SetKiosk));
             foreach (var area in WindowsAreas.All)
                 Areas.Add(new AreaRowViewModel(area, (policy.BlockedAreas ?? []).Contains(area), SetAreaBlocked));
             HasAccounts = Accounts.Count > 0;
@@ -283,19 +298,21 @@ public sealed partial class AppsViewModel : ObservableObject
         }
         var state = server.Accounts.State(device.Id);
         var restricted = Accounts.Count(a => a.IsRestricted);
+        var kiosk = Accounts.Count(a => a.IsKiosk);
+        var kioskHint = kiosk > 0 ? $" {kiosk} Konto(s) nutzen den Launcher als Desktop." : "";
         if (!string.IsNullOrEmpty(state.Message))
         {
             RestrictionStatus = state.Message;
             RestrictionBrush = state.Applied ? DeviceViewModel.WarnBrush : DeviceViewModel.ErrorBrush;
         }
-        else if (restricted == 0)
+        else if (restricted == 0 && kiosk == 0)
         {
             RestrictionStatus = "Kein Konto eingeschränkt. Alle nutzen Windows ganz normal.";
             RestrictionBrush = DeviceViewModel.OfflineBrush;
         }
         else
         {
-            RestrictionStatus = $"{restricted} Konto(s) eingeschränkt. Wirkt, sobald der PC online ist.";
+            RestrictionStatus = $"{restricted} Konto(s) eingeschränkt.{kioskHint} Wirkt, sobald der PC online ist.";
             RestrictionBrush = DeviceViewModel.OnlineBrush;
         }
     }
@@ -304,6 +321,12 @@ public sealed partial class AppsViewModel : ObservableObject
     {
         if (!_syncingRestrictions)
             ChangePolicy((p, now) => p.WithRestrictedAccount(row.Account.Sid, restricted, now));
+    }
+
+    private void SetKiosk(AccountRowViewModel row, bool kiosk)
+    {
+        if (!_syncingRestrictions)
+            ChangePolicy((p, now) => p.WithKioskAccount(row.Account.Sid, kiosk, now));
     }
 
     private void SetAreaBlocked(string area, bool blocked)
@@ -482,7 +505,7 @@ public sealed partial class AppsViewModel : ObservableObject
         // Konten- und Bereich-Schalter an den neuen Stand angleichen
         _syncingRestrictions = true;
         foreach (var account in Accounts)
-            account.Sync(policy.IsRestricted(account.Account.Sid));
+            account.Sync(policy.IsRestricted(account.Account.Sid), policy.IsKiosk(account.Account.Sid));
         foreach (var area in Areas)
             area.Sync((policy.BlockedAreas ?? []).Contains(area.Area));
         _syncingRestrictions = false;

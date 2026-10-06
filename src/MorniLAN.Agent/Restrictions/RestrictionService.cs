@@ -22,10 +22,14 @@ internal sealed class RestrictionService(
     Func<IReadOnlyList<LocalAccount>>? scanAccounts = null,
     Func<bool>? isPaused = null,
     Action? resume = null,
+    Action<string, string?>? setShell = null,
+    Func<string?>? resolveShell = null,
     TimeProvider? time = null) : BackgroundService
 {
     private readonly Action<string, IReadOnlySet<string>> _writePolicies = writePolicies ?? UserPolicyWriter.Apply;
     private readonly Action<string> _clearPolicies = clearPolicies ?? UserPolicyWriter.Clear;
+    private readonly Action<string, string?> _setShell = setShell ?? UserPolicyWriter.SetShell;
+    private readonly Func<string?> _resolveShell = resolveShell ?? KioskShell.ResolveLauncherCommand;
     private readonly Action<int> _terminate = terminate ?? TerminateProcess;
     private readonly Func<IEnumerable<ProcessOwnership.RunningProcess>> _enumerate = enumerate ?? ProcessOwnership.Enumerate;
     private readonly Func<IReadOnlyList<LocalAccount>> _scanAccounts = scanAccounts ?? AccountScanner.Scan;
@@ -115,6 +119,13 @@ internal sealed class RestrictionService(
         var blockedAreas = (current.BlockedAreas ?? []).Where(WindowsAreas.IsKnown).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var problems = new List<string>();
         var restricted = 0;
+        var kiosk = 0;
+
+        // Shell-Kommando nur ermitteln, wenn überhaupt ein Konto den Kiosk will (spart Registry-Zugriff).
+        var anyKioskWanted = !paused && Accounts.Any(a => RestrictionPlan.IsAccountKiosk(current, a.Sid, a.IsAdministrator));
+        var shellCommand = anyKioskWanted ? _resolveShell() : null;
+        if (anyKioskWanted && shellCommand is null)
+            problems.Add("Launcher für den Desktop-Modus nicht gefunden – der Kiosk bleibt aus, bis das Geräte-Setup erneut läuft.");
 
         foreach (var account in Accounts)
         {
@@ -130,6 +141,18 @@ internal sealed class RestrictionService(
                 {
                     _clearPolicies(account.Sid);
                 }
+
+                // Desktop-Ersatz getrennt von den übrigen Sperren: ein Konto kann Kiosk sein, ohne weitere Sperren.
+                if (!paused && shellCommand is not null
+                    && RestrictionPlan.IsAccountKiosk(current, account.Sid, account.IsAdministrator))
+                {
+                    _setShell(account.Sid, shellCommand);
+                    kiosk++;
+                }
+                else
+                {
+                    _setShell(account.Sid, null); // normaler Windows-Desktop
+                }
             }
             catch (Exception ex)
             {
@@ -143,12 +166,12 @@ internal sealed class RestrictionService(
         RestrictionState state;
         lock (_lock)
         {
-            state = _state = new RestrictionState(problems.Count == 0, restricted, "off", message);
+            state = _state = new RestrictionState(problems.Count == 0, restricted, "off", message, kiosk);
         }
         StateChanged?.Invoke(state);
-        if (restricted > 0 || current.BlockedAreas is { Length: > 0 })
-            logger.LogInformation("Sperren angewandt: {Count} Konten, Bereiche {Areas}, Pause {Paused}", restricted,
-                string.Join(", ", blockedAreas), paused);
+        if (restricted > 0 || kiosk > 0 || current.BlockedAreas is { Length: > 0 })
+            logger.LogInformation("Sperren angewandt: {Count} Konten, {Kiosk} Kiosk, Bereiche {Areas}, Pause {Paused}",
+                restricted, kiosk, string.Join(", ", blockedAreas), paused);
         GuardProcesses();
     }
 

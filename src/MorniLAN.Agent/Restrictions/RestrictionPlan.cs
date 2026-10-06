@@ -49,4 +49,11 @@ internal static class RestrictionPlan
     /// <summary>Gilt für dieses Konto überhaupt eine Einschränkung? (Nie für Administratoren.)</summary>
     public static bool IsAccountRestricted(AppPolicy policy, string sid, bool isAdministrator) =>
         !isAdministrator && policy.IsRestricted(sid);
+
+    /// <summary>
+    /// Soll in diesem Konto der Launcher der Desktop sein (Shell-Ersatz)? Nie für Administratoren – das eigene
+    /// Admin-Konto behält immer den normalen Windows-Desktop.
+    /// </summary>
+    public static bool IsAccountKiosk(AppPolicy policy, string sid, bool isAdministrator) =>
+        !isAdministrator && policy.IsKiosk(sid);
 }
