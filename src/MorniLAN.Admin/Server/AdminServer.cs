@@ -59,9 +59,11 @@ public sealed class AdminServer : IAsyncDisposable
         Inventory = new InventoryStore(options.DataDirectory);
         Policies = new PolicyStore(options.DataDirectory, options.Time);
         Profiles = new DeviceProfileStore(options.DataDirectory);
+        Accounts = new DeviceAccountStore(options.DataDirectory);
     }
 
     public DeviceProfileStore Profiles { get; }
+    public DeviceAccountStore Accounts { get; }
     public HelpInbox Help { get; } = new();
 
     public AdminIdentity Identity { get; }
@@ -98,6 +100,7 @@ public sealed class AdminServer : IAsyncDisposable
         builder.Services.AddSingleton(Inventory);
         builder.Services.AddSingleton(Policies);
         builder.Services.AddSingleton(Profiles);
+        builder.Services.AddSingleton(Accounts);
         builder.Services.AddSingleton(Help);
         builder.Services.AddSingleton(_options.Time);
         builder.Services.AddSignalR(o =>
@@ -138,6 +141,7 @@ public sealed class AdminServer : IAsyncDisposable
             return;
         Policies.Remove(deviceId);
         Profiles.Remove(deviceId);
+        Accounts.Remove(deviceId);
         Log.Information("PC {DeviceId} vom Admin entkoppelt", deviceId);
         if (connectionId is null || _app is null)
             return;
@@ -191,6 +195,16 @@ public sealed class AdminServer : IAsyncDisposable
         await hub.Clients.Client(connectionId).OnDeleteProfile(profileId);
         if (Policies.Get(deviceId).ProfileRules?.Any(p => p.ProfileId == profileId) == true)
             await UpdatePolicyAsync(deviceId, (p, now) => p.WithoutProfile(profileId, now));
+        return true;
+    }
+
+    /// <summary>Den Agent bitten, die Sperren jetzt neu anzuwenden (auch um eine Notfall-Entsperrung zu beenden).</summary>
+    public async Task<bool> ApplyRestrictionsAsync(Guid deviceId)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnApplyRestrictions();
         return true;
     }
 

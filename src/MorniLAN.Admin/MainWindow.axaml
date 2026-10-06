@@ -306,6 +306,64 @@
             </StackPanel>
           </Border>
 
+          <!-- Windows-Sperren: welche Konten, welche Bereiche -->
+          <Border Classes="card" IsVisible="{Binding Apps.HasDevice}">
+            <StackPanel Spacing="12">
+              <TextBlock Text="Windows-Sperren" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Wähle, welche Konten eingeschränkt werden. Nicht angehakte Konten (und Administratorkonten) nutzen Windows ganz normal. Dein eigenes Admin-Konto wird nie eingeschränkt." />
+              <TextBlock Classes="muted" TextWrapping="Wrap" IsVisible="{Binding !Apps.HasAccounts}"
+                         Text="Der PC hat seine Konten noch nicht gemeldet. Sobald er online ist, erscheinen sie hier." />
+
+              <ItemsControl ItemsSource="{Binding Apps.Accounts}" IsVisible="{Binding Apps.HasAccounts}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AccountRowViewModel">
+                    <Border Background="#15181E" CornerRadius="10" Padding="12,10" Margin="0,0,10,10" MinWidth="220">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel VerticalAlignment="Center">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                          <TextBlock Text="{Binding Role}" Classes="label" />
+                        </StackPanel>
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsRestricted}" IsEnabled="{Binding CanRestrict}"
+                                      OnContent="eingeschränkt" OffContent="normal" />
+                      </Grid>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <TextBlock Text="Gesperrte Windows-Bereiche (in den eingeschränkten Konten)" Classes="muted"
+                         IsVisible="{Binding Apps.HasAccounts}" />
+              <ItemsControl ItemsSource="{Binding Apps.Areas}" IsVisible="{Binding Apps.HasAccounts}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:AreaRowViewModel">
+                    <ToggleSwitch Margin="0,0,20,0" IsChecked="{Binding IsBlocked}" OnContent="{Binding Name}"
+                                  OffContent="{Binding Name}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+
+              <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding Apps.HasAccounts}">
+                <Ellipse Width="10" Height="10" Fill="{Binding Apps.RestrictionBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Margin="10,0" Text="{Binding Apps.RestrictionStatus}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+                <Button Grid.Column="2" Content="Sperren jetzt aktivieren" Command="{Binding Apps.ApplyRestrictionsCommand}" />
+              </Grid>
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" IsVisible="{Binding Apps.HasAccounts}"
+                         Text="Notfall: Am PC gibt es im Startmenü „MorniLAN Notfall-Entsperrung“. Damit hebt man mit Administrator-Passwort alle Sperren auf, auch ohne Panel. App Control (harte Windows-Sperre) kommt als eigener Schritt mit Prüfmodus." />
+            </StackPanel>
+          </Border>
+
           <!-- Stand auf dem PC, Sammel-Knöpfe, eigener Eintrag -->
           <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding Apps.HasDevice}">
             <Ellipse Width="10" Height="10" Fill="{Binding Apps.PolicyBrush}" VerticalAlignment="Center" />

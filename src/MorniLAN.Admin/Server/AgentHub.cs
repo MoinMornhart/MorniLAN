@@ -16,6 +16,7 @@ internal sealed class AgentHub(
     InventoryStore inventory,
     PolicyStore policies,
     DeviceProfileStore profiles,
+    DeviceAccountStore accounts,
     HelpInbox help,
     TimeProvider time,
     ILogger<AgentHub> logger) : Hub<IAgentClient>, IAdminHub
@@ -144,6 +145,23 @@ internal sealed class AgentHub(
         var profile = request.ProfileName is { Length: > LauncherProfile.MaxNameLength } tooLong ? tooLong[..LauncherProfile.MaxNameLength] : request.ProfileName;
         help.Add(new HelpNotice(deviceId, name, request with { ProfileName = profile }, time.GetUtcNow()));
         logger.LogInformation("Hilfe angefordert auf {Machine} ({Profile})", name, profile ?? "ohne Profil");
+        return Task.CompletedTask;
+    }
+
+    public Task ReportAccounts(LocalAccount[] reported)
+    {
+        var deviceId = RequirePairedDevice();
+        if (reported.Length > 200)
+            throw new HubException("Zu viele Konten.");
+        accounts.Save(deviceId, reported);
+        return Task.CompletedTask;
+    }
+
+    public Task ReportRestrictionState(RestrictionState state)
+    {
+        var deviceId = RequirePairedDevice();
+        var message = state.Message.Length <= 300 ? state.Message : state.Message[..300];
+        accounts.SaveState(deviceId, state with { Message = message });
         return Task.CompletedTask;
     }
 

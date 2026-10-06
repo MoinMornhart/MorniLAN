@@ -23,6 +23,77 @@ public sealed record ScopeChoice(string? ProfileId, string Name)
     public override string ToString() => Name;
 }
 
+/// <summary>Ein Windows-Konto mit Schalter „einschränken“.</summary>
+public sealed partial class AccountRowViewModel : ObservableObject
+{
+    private readonly Action<AccountRowViewModel, bool> _setRestricted;
+    private bool _syncing;
+
+    public AccountRowViewModel(LocalAccount account, bool restricted, Action<AccountRowViewModel, bool> setRestricted)
+    {
+        Account = account;
+        _setRestricted = setRestricted;
+        _syncing = true;
+        IsRestricted = restricted && !account.IsAdministrator;
+        _syncing = false;
+    }
+
+    public LocalAccount Account { get; }
+    public string Name => Account.Name;
+    public bool CanRestrict => !Account.IsAdministrator;
+    public string Role => Account.IsAdministrator ? "Administrator – wird nie eingeschränkt" : "Standardkonto";
+
+    [ObservableProperty] public partial bool IsRestricted { get; set; }
+
+    partial void OnIsRestrictedChanged(bool value)
+    {
+        if (!_syncing)
+            _setRestricted(this, value);
+    }
+
+    internal void Sync(bool restricted)
+    {
+        _syncing = true;
+        IsRestricted = restricted && !Account.IsAdministrator;
+        _syncing = false;
+    }
+}
+
+/// <summary>Ein Windows-Bereich (z. B. Eingabeaufforderung) mit Schalter „sperren“.</summary>
+public sealed partial class AreaRowViewModel : ObservableObject
+{
+    private readonly Action<string, bool> _setBlocked;
+    private bool _syncing;
+
+    public AreaRowViewModel(string area, bool blocked, Action<string, bool> setBlocked)
+    {
+        Area = area;
+        Name = WindowsAreas.Describe(area);
+        _setBlocked = setBlocked;
+        _syncing = true;
+        IsBlocked = blocked;
+        _syncing = false;
+    }
+
+    public string Area { get; }
+    public string Name { get; }
+
+    [ObservableProperty] public partial bool IsBlocked { get; set; }
+
+    partial void OnIsBlockedChanged(bool value)
+    {
+        if (!_syncing)
+            _setBlocked(Area, value);
+    }
+
+    internal void Sync(bool blocked)
+    {
+        _syncing = true;
+        IsBlocked = blocked;
+        _syncing = false;
+    }
+}
+
 /// <summary>Ein Profil in der Verwaltung.</summary>
 public sealed class ProfileRowViewModel(LauncherProfile profile, int ownRules)
 {
@@ -160,6 +231,95 @@ public sealed partial class AppsViewModel : ObservableObject
     public ObservableCollection<AppItemViewModel> Apps { get; } = [];
     public ObservableCollection<ScopeChoice> Scopes { get; } = [];
     public ObservableCollection<ProfileRowViewModel> ProfileRows { get; } = [];
+    public ObservableCollection<AccountRowViewModel> Accounts { get; } = [];
+    public ObservableCollection<AreaRowViewModel> Areas { get; } = [];
+
+    [ObservableProperty] public partial bool HasAccounts { get; set; }
+    [ObservableProperty] public partial string RestrictionStatus { get; set; } = "";
+    [ObservableProperty] public partial IBrush RestrictionBrush { get; set; } = DeviceViewModel.OfflineBrush;
+    private bool _syncingRestrictions;
+
+    /// <summary>Konten oder Sperren-Stand eines PCs haben sich geändert.</summary>
+    public void AccountsChanged(Guid deviceId)
+    {
+        if (deviceId == SelectedDevice?.Id)
+            LoadRestrictions();
+    }
+
+    private void LoadRestrictions()
+    {
+        _syncingRestrictions = true;
+        try
+        {
+            Accounts.Clear();
+            Areas.Clear();
+            if (_server() is not { } server || SelectedDevice is not { } device)
+            {
+                HasAccounts = false;
+                RestrictionStatus = "";
+                return;
+            }
+            var policy = server.Policies.Get(device.Id);
+            foreach (var account in server.Accounts.Get(device.Id))
+                Accounts.Add(new AccountRowViewModel(account, policy.IsRestricted(account.Sid), SetRestricted));
+            foreach (var area in WindowsAreas.All)
+                Areas.Add(new AreaRowViewModel(area, (policy.BlockedAreas ?? []).Contains(area), SetAreaBlocked));
+            HasAccounts = Accounts.Count > 0;
+            UpdateRestrictionStatus();
+        }
+        finally
+        {
+            _syncingRestrictions = false;
+        }
+    }
+
+    private void UpdateRestrictionStatus()
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+        {
+            RestrictionStatus = "";
+            return;
+        }
+        var state = server.Accounts.State(device.Id);
+        var restricted = Accounts.Count(a => a.IsRestricted);
+        if (!string.IsNullOrEmpty(state.Message))
+        {
+            RestrictionStatus = state.Message;
+            RestrictionBrush = state.Applied ? DeviceViewModel.WarnBrush : DeviceViewModel.ErrorBrush;
+        }
+        else if (restricted == 0)
+        {
+            RestrictionStatus = "Kein Konto eingeschränkt. Alle nutzen Windows ganz normal.";
+            RestrictionBrush = DeviceViewModel.OfflineBrush;
+        }
+        else
+        {
+            RestrictionStatus = $"{restricted} Konto(s) eingeschränkt. Wirkt, sobald der PC online ist.";
+            RestrictionBrush = DeviceViewModel.OnlineBrush;
+        }
+    }
+
+    private void SetRestricted(AccountRowViewModel row, bool restricted)
+    {
+        if (!_syncingRestrictions)
+            ChangePolicy((p, now) => p.WithRestrictedAccount(row.Account.Sid, restricted, now));
+    }
+
+    private void SetAreaBlocked(string area, bool blocked)
+    {
+        if (!_syncingRestrictions)
+            ChangePolicy((p, now) => p.WithBlockedArea(area, blocked, now));
+    }
+
+    [RelayCommand]
+    private async Task ApplyRestrictionsAsync()
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+            return;
+        RestrictionStatus = await server.ApplyRestrictionsAsync(device.Id)
+            ? "Sperren werden auf dem PC angewandt …"
+            : "Der PC ist gerade nicht online.";
+    }
 
     /// <summary>Für wen die Schalter gerade gelten (null-Profil = alle Profile, also der PC).</summary>
     [ObservableProperty] public partial ScopeChoice? SelectedScope { get; set; }
@@ -284,6 +444,7 @@ public sealed partial class AppsViewModel : ObservableObject
         OnPropertyChanged(nameof(HasDevice));
         ProfileMessage = "";
         LoadProfiles();
+        LoadRestrictions();
         LoadReport();
     }
 
@@ -307,6 +468,14 @@ public sealed partial class AppsViewModel : ObservableObject
         var policy = server.Policies.Get(deviceId);
         foreach (var item in _all)
             item.Sync(policy.IsAllowed(item.App.Id, ScopeProfileId));
+        // Konten- und Bereich-Schalter an den neuen Stand angleichen
+        _syncingRestrictions = true;
+        foreach (var account in Accounts)
+            account.Sync(policy.IsRestricted(account.Account.Sid));
+        foreach (var area in Areas)
+            area.Sync((policy.BlockedAreas ?? []).Contains(area.Area));
+        _syncingRestrictions = false;
+        UpdateRestrictionStatus();
         if (!_syncingProfiles)
         {
             ProfileCreationAllowedSync(!policy.BlockProfileCreation);

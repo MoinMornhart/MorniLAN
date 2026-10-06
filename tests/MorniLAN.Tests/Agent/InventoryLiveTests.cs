@@ -92,6 +92,10 @@ public class InventoryLiveTests
         var inventory = new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance, () => new InventoryCollector.Result(
             [new InventoryItem(new MorniLAN.Shared.Models.AppEntry("steam:427520", "Factorio", MorniLAN.Shared.Models.AppSource.Steam,
                 SteamAppId: 427520), new ImageSources())], []), policy: policy);
+        // Sperren-Dienst: echte Konten melden, aber NICHTS an der echten Registry ändern (No-Op)
+        var restrictions = new MorniLAN.Agent.Restrictions.RestrictionService(policy,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Restrictions.RestrictionService>.Instance,
+            writePolicies: (_, _) => { }, clearPolicies: _ => { }, terminate: _ => { }, enumerate: () => []);
         var options = new MorniLAN.Agent.Connection.AgentConnectionOptions
         {
             DataDirectory = data, AdminHost = "127.0.0.1", AdminPort = 47950, EnableDiscovery = false,
@@ -100,8 +104,10 @@ public class InventoryLiveTests
             new MorniLAN.Agent.Connection.AgentStateStore(data),
             MorniLAN.Agent.Connection.AgentIdentity.LoadOrCreate(data, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance),
             new MorniLAN.Agent.Platform.SystemStatusCollector(), Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.AdminConnectionService>.Instance,
-            inventory: inventory, policy: policy, profiles: profiles, inbox: inbox);
+            inventory: inventory, policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions);
         await inbox.StartAsync(ct);
+        using var restrictionsCts = new CancellationTokenSource();
+        await restrictions.StartAsync(restrictionsCts.Token);
         await agent.StartAsync(ct);
         var seconds = int.TryParse(Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_SECONDS"), out var s) ? s : 300;
         var end = DateTime.UtcNow.AddSeconds(seconds);
@@ -111,6 +117,8 @@ public class InventoryLiveTests
             await Task.Delay(1000, ct);
         }
         await agent.StopAsync(CancellationToken.None);
+        await restrictionsCts.CancelAsync();
+        await restrictions.StopAsync(CancellationToken.None);
         await inbox.StopAsync(CancellationToken.None);
     }
 

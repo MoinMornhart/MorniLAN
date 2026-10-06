@@ -48,8 +48,26 @@ public sealed record AppPolicy(
     CustomApp[] CustomApps,
     DateTimeOffset UpdatedAt,
     ProfileRuleSet[]? ProfileRules = null,
-    bool BlockProfileCreation = false)
+    bool BlockProfileCreation = false,
+    string[]? RestrictedAccounts = null,
+    string[]? BlockedAreas = null)
 {
+    /// <summary>Wird dieses Windows-Konto eingeschränkt? (SID; Administratorkonten prüft der Agent zusätzlich.)</summary>
+    public bool IsRestricted(string sid) => (RestrictedAccounts ?? []).Contains(sid, StringComparer.OrdinalIgnoreCase);
+
+    public AppPolicy WithRestrictedAccount(string sid, bool restricted, DateTimeOffset now) =>
+        Next(now) with
+        {
+            RestrictedAccounts = [.. (RestrictedAccounts ?? []).Where(s => !string.Equals(s, sid, StringComparison.OrdinalIgnoreCase)),
+                .. restricted ? [sid] : Array.Empty<string>()],
+        };
+
+    public AppPolicy WithBlockedArea(string area, bool blocked, DateTimeOffset now) =>
+        Next(now) with
+        {
+            BlockedAreas = [.. (BlockedAreas ?? []).Where(a => a != area), .. blocked ? [area] : Array.Empty<string>()],
+        };
+
     /// <summary>Stand, bevor der Admin etwas eingestellt hat.</summary>
     public static AppPolicy Default { get; } = new(0, true, [], [], DateTimeOffset.UnixEpoch);
 

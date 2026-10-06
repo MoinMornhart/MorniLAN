@@ -33,7 +33,7 @@ Portfreigaben am Router.
 
 > [!NOTE]
 > MorniLAN ist in **früher Entwicklung**. Verbinden, Erkennen, Freigaben und Updates funktionieren schon,
-> der Launcher mit Profilen auch. Das Durchsetzen der Sperren kommt als Nächstes (siehe [Fahrplan](#fahrplan)).
+> der Launcher mit Profilen und die Windows-Sperren je Konto auch. Fernzugriff kommt als Nächstes (siehe [Fahrplan](#fahrplan)).
 
 ## So funktioniert's
 
@@ -92,7 +92,7 @@ Ausführliche Anleitung mit Fehlersuche: [docs/einrichtung.md](docs/einrichtung.
 | 🔄 | **Automatische Updates:** Das Panel bietet neue Versionen an, die PCs aktualisieren sich selbst, aber nie mitten im Spiel | ✅ in der Beta |
 | ✅ | **Freigaben:** per Schalter festlegen, was im Launcher erscheint (Standard: alles frei), eigene Einträge für Programme, die MorniLAN nicht selbst findet | ✅ in der Beta |
 | 🖥️ | **Launcher wie eine Konsole:** startet bei der Anmeldung im Vollbild, „Wer spielt?“ mit Profilen, Suche, „Zuletzt gespielt“, Leiste mit Uhr, Ton und WLAN, Bedienung auch mit dem Controller | ✅ in der Beta |
-| 🔒 | **Sperren:** nur Freigegebenes läuft, Systemeinstellungen sind geschützt, mit Notfall-Entsperrung | 🔜 geplant |
+| 🔒 | **Windows-Sperren:** je Konto wählen, ob es eingeschränkt wird (Admin-Konten nie); Einstellungen, Konsole, Registry, Task-Manager und Installieren sperrbar, mit Notfall-Entsperrung am PC | ✅ in der Beta |
 | 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen, über Sunshine und Moonlight | 🔜 geplant |
 | 🙋 | **Hilfe anfordern:** ein Knopf im Launcher, du bekommst sofort einen Hinweis im Panel | ✅ in der Beta |
 
@@ -124,7 +124,7 @@ dem Start über seine Prüfsumme (SHA-256) geprüft.
 - [x] Automatische Updates (vorgezogen aus Schritt 9)
 - [x] 4. Freigaben (Schalter je PC, eigene Einträge, einfache Kacheln im Launcher)
 - [x] 5. Launcher im Vollbild mit Profilen, Controller und Hilfe-Knopf
-- [ ] 6. Sperren durchsetzen und Notfall-Entsperrung
+- [x] 6. Windows-Sperren je Konto und Notfall-Entsperrung (App Control folgt mit Prüfmodus)
 - [ ] 7. Fernzugriff (Sunshine/Moonlight)
 - [ ] 8. Aktionen (winget, Nachrichten, Neustart, Hilfe anfordern)
 - [ ] 9. Updates mit Rückfall auf die alte Version

@@ -146,5 +146,7 @@ public sealed class PairingCoordinatorTests : IDisposable
         public Task OnCreateProfile(MorniLAN.Shared.Models.LauncherProfile profile) => Task.CompletedTask;
 
         public Task OnDeleteProfile(string profileId) => Task.CompletedTask;
+
+        public Task OnApplyRestrictions() => Task.CompletedTask;
     }
 }
