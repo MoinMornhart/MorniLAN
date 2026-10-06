@@ -6,9 +6,11 @@ using MorniLAN.Admin.Server;
 using MorniLAN.Agent.Connection;
 using MorniLAN.Agent.Inventory;
 using MorniLAN.Agent.Platform;
+using MorniLAN.Shared;
 using MorniLAN.Shared.Connection;
 using MorniLAN.Shared.Models;
 using MorniLAN.Shared.Security;
+using MorniLAN.Shared.Updates;
 using MorniLAN.Tests.Connection;
 
 namespace MorniLAN.Tests.Integration;
@@ -484,16 +486,63 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await StopAsync(agent);
     }
 
+    [Fact]
+    public async Task UpdateTrigger_FromPanel_ReachesAgent_AndStateReportedBack()
+    {
+        await using var admin = await StartAdminAsync(_adminDir.Path);
+
+        // Agent-Update-Dienst: ein garantiert neueres Release, Download/Install als No-Op
+        var current = SemanticVersion.Parse(VersionInfo.Version);
+        var newer = SemanticVersion.Parse($"{current.Major}.{current.Minor}.{current.Patch + 1}-beta.1");
+        IReadOnlyList<ReleaseInfo> releases =
+        [
+            new ReleaseInfo($"v{newer}", newer, true, new Uri("https://example.invalid/r"), "",
+            [
+                new ReleaseAsset($"MorniLAN-Geraete-Setup-{newer}.exe", new Uri("https://example.invalid/g.exe"), 10, new string('a', 64)),
+            ]),
+        ];
+        var launched = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var updates = new MorniLAN.Agent.Updates.AgentUpdateService(
+            NullLogger<MorniLAN.Agent.Updates.AgentUpdateService>.Instance,
+            _ => Task.FromResult(releases), isGameRunning: () => false, canInstall: true,
+            download: (u, _) => Task.FromResult(@"C:\temp\" + u.Setup.Name),
+            launch: (_, _) => launched.TrySetResult(), dataDir: _agentDir.Path);
+        await updates.StartAsync(Ct);
+
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path, AdminHost = "127.0.0.1", AdminPort = admin.Port,
+            EnableDiscovery = false, HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        var agent = await StartAgentAsync(options, updates: updates);
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        var deviceId = new AgentStateStore(_agentDir.Path).Current.DeviceId;
+        await WaitUntil(() => agent.State == AgentLinkState.Online, "online");
+
+        // Panel stößt das Update an → Agent prüft, „installiert" (No-Op) und meldet den Stand zurück
+        Assert.True(await admin.RequestDeviceUpdateAsync(deviceId));
+        await launched.Task.WaitAsync(TimeSpan.FromSeconds(20), Ct);
+        await WaitUntil(
+            () => admin.Registry.Snapshot().FirstOrDefault(d => d.Device.DeviceId == deviceId)?.Update?.AvailableVersion == newer.ToString(),
+            "Update-Stand im Panel");
+
+        await StopAsync(agent);
+        await updates.StopAsync(CancellationToken.None);
+    }
+
     private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
         DiscoveryListener? discovery = null, InventoryService? inventory = null,
         MorniLAN.Agent.Policy.AgentPolicyStore? policy = null, MorniLAN.Agent.Policy.AgentProfileStore? profiles = null,
         MorniLAN.Agent.Policy.LauncherInboxService? inbox = null, MorniLAN.Agent.Restrictions.RestrictionService? restrictions = null,
-        MorniLAN.Agent.Remote.RemoteAccessService? remote = null, MorniLAN.Agent.Actions.ActionService? actions = null)
+        MorniLAN.Agent.Remote.RemoteAccessService? remote = null, MorniLAN.Agent.Actions.ActionService? actions = null,
+        MorniLAN.Agent.Updates.AgentUpdateService? updates = null)
     {
         var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
         var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
             identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory,
-            policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions, remote: remote, actions: actions);
+            updates: updates, policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions, remote: remote,
+            actions: actions);
         await service.StartAsync(Ct);
         return service;
     }
