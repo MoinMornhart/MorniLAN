@@ -5,9 +5,9 @@ using Microsoft.Win32;
 namespace MorniLAN.Agent.Remote;
 
 /// <summary>
-/// Startet und prüft Sunshine (den Streaming-Host). Sunshine läuft als eigener Windows-Dienst; MorniLAN installiert
-/// es nicht selbst (das macht das Geräte-Setup später), sondern sorgt nur dafür, dass es läuft, wenn der Fernzugriff
-/// gewünscht ist. Fehlt Sunshine, meldet der Fernzugriff „muss noch eingerichtet werden“.
+/// Startet und prüft Sunshine (den Streaming-Host). Sunshine läuft als eigener Windows-Dienst; dieses hier sorgt nur
+/// dafür, dass es läuft. Die Installation übernimmt <see cref="SunshineInstaller"/> automatisch per winget, sobald der
+/// Fernzugriff verlangt wird und Sunshine fehlt.
 /// </summary>
 internal static class SunshineControl
 {

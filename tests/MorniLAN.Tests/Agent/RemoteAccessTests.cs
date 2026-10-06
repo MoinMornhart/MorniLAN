@@ -13,11 +13,14 @@ public sealed class RemoteAccessTests : IDisposable
 
     public void Dispose() => _dir.Dispose();
 
-    private RemoteAccessService NewService(bool sunshineInstalled = true, bool sunshineRuns = true) =>
+    private RemoteAccessService NewService(bool sunshineInstalled = true, bool sunshineRuns = true,
+        Func<CancellationToken, Task<bool>>? installSunshine = null, Func<bool>? installedCheck = null) =>
         new(NullLogger<RemoteAccessService>.Instance,
             ensureSunshine: () => sunshineRuns,
-            sunshineInstalled: () => sunshineInstalled,
+            sunshineInstalled: installedCheck ?? (() => sunshineInstalled),
             hostAddress: () => "192.168.178.50:47989",
+            // Standard im Test: NICHT wirklich winget aufrufen – als „fehlgeschlagen" behandeln
+            installSunshine: installSunshine ?? (_ => Task.FromResult(false)),
             time: new FakeTime(() => _now));
 
     [Fact]
@@ -62,11 +65,28 @@ public sealed class RemoteAccessTests : IDisposable
     }
 
     [Fact]
-    public void Unavailable_WhenSunshineMissing()
+    public void Unavailable_WhenSunshineMissing_AndAutoInstallFails()
     {
-        var service = NewService(sunshineInstalled: false);
+        var service = NewService(sunshineInstalled: false); // Install schlägt im Test fehl (kein echtes winget)
         service.Start(allowWithoutConsent: true);
         Assert.Equal(RemoteSessionPhase.Unavailable, service.State.Phase);
+        Assert.Contains("einrichten", service.State.Message);
+    }
+
+    [Fact]
+    public void MissingSunshine_IsAutoInstalled_ThenActivates()
+    {
+        var installed = false;
+        var installCalls = 0;
+        var service = NewService(
+            installedCheck: () => installed,
+            installSunshine: _ => { installCalls++; installed = true; return Task.FromResult(true); });
+
+        service.Start(allowWithoutConsent: true);
+
+        Assert.Equal(1, installCalls);                         // einmal automatisch installiert
+        Assert.Equal(RemoteSessionPhase.Active, service.State.Phase); // und danach direkt aktiv
+        Assert.Equal("192.168.178.50:47989", service.State.Host);
     }
 
     [Fact]
@@ -93,6 +113,24 @@ public sealed class RemoteAccessTests : IDisposable
         service.Stop();
         service.Consent(allow: true);
         Assert.Equal(RemoteSessionPhase.Idle, service.State.Phase);
+    }
+
+    [Fact]
+    public async Task SunshineInstaller_UsesWinget_WithExpectedArgs()
+    {
+        string? seen = null;
+        var ok = await SunshineInstaller.InstallAsync((args, _) => { seen = args; return Task.FromResult(0); }, CancellationToken.None);
+
+        Assert.True(ok);
+        Assert.Contains("install --id LizardByte.Sunshine --exact --silent", seen);
+        Assert.Contains("--accept-package-agreements", seen);
+    }
+
+    [Fact]
+    public async Task SunshineInstaller_ReportsFailure_OnNonZeroExit()
+    {
+        var ok = await SunshineInstaller.InstallAsync((_, _) => Task.FromResult(1), CancellationToken.None);
+        Assert.False(ok);
     }
 
     // ───── Panel-Ablage ─────
