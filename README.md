@@ -32,8 +32,10 @@ Portfreigaben am Router.
 </p>
 
 > [!NOTE]
-> MorniLAN ist in **früher Entwicklung**. Verbinden, Erkennen, Freigaben und Updates funktionieren schon,
-> der Launcher mit Profilen und die Windows-Sperren je Konto auch. Fernzugriff kommt als Nächstes (siehe [Fahrplan](#fahrplan)).
+> MorniLAN ist in **aktiver Entwicklung** (Beta). Verbinden, Erkennen, Freigaben, Updates, der Launcher mit Profilen,
+> die Windows-Sperren je Konto, der Launcher-als-Desktop-Modus, der Fernzugriff (Steuerung) und der Einrichtungs-Assistent
+> funktionieren bereits. Offen für den ersten stabilen Release sind vor allem die Tests zu zweit mit einem echten
+> zweiten PC (Bild-Streaming, echte Installationen). Siehe [Fahrplan](#fahrplan).
 
 ## So funktioniert's
 
@@ -127,11 +129,14 @@ dem Start über seine Prüfsumme (SHA-256) geprüft.
 - [x] 4. Freigaben (Schalter je PC, eigene Einträge, einfache Kacheln im Launcher)
 - [x] 5. Launcher im Vollbild mit Profilen, Controller und Hilfe-Knopf
 - [x] 6. Windows-Sperren je Konto und Notfall-Entsperrung (App Control folgt mit Prüfmodus)
-- [x] 7. Fernzugriff: Steuerung, Anzeige am PC, Eingabesperre (Streaming-Test zu zweit steht aus)
+- [x] 7. Fernzugriff: Steuerung, Anzeige am PC, Eingabesperre (Streaming-Test zu zweit steht aus); Sunshine wird bei Bedarf automatisch per winget eingerichtet
+- [x] Launcher als echter Desktop (Kiosk/Shell-Ersatz) je Konto
 - [x] 8. Aktionen: Programme installieren/deinstallieren, Nachricht, Neustart/Herunterfahren
-- [ ] 9. Updates mit Rückfall auf die alte Version
-- [ ] 10. Einrichtungsassistent: PC einschalten, Profil wählen, los
-- [ ] 11. Feinschliff und Admin-Doku
+- [x] Aufräumen: unnötige Apps erkennen und auf Bestätigung ausblenden
+- [x] 9. Auto-Update gehärtet: Panel-Selbstheilung, Geräte-Verifikation nach Neustart, GitHub-Schonung (ETag)
+- [x] 10. Einrichtungs-Assistent im Panel (Firewall + erstes Pairing) und Adressfeld am Gerät
+- [x] 11. Feinschliff und Stabilität (gezielter Bug-Review)
+- [ ] Erster stabiler Release v0.3.0 (nach den Tests zu zweit mit echtem zweiten PC)
 - [ ] 12. Extras
 
 Was sich zwischen den Versionen ändert, steht im [Changelog](CHANGELOG.md).
