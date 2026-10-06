@@ -52,6 +52,7 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
   - **Freigaben:**
     - Liste aller installierten Programme und Steam-Spiele auf dem Freundes-PC, freigegeben per Schalter;
     - eigene Einträge hinzufügen (EXE-Pfad, Name, Icon).
+    - Entschieden (M4, 2026-10-06): **Standard ist „alles frei“**, auch für neu Installiertes; der Admin sperrt gezielt. Freigaben gelten **pro PC**. Der Launcher zeigt Freigegebenes schon in M4 als einfache Kacheln. Das Panel ist die einzige Quelle (Stand mit fortlaufender Nummer), der Agent speichert den letzten Stand lokal und meldet zurück, welchen er anwendet. Ohne Admin (entkoppelt) gelten keine Freigaben.
   - **Fernzugriff:** Button „Verbinden“, der die Remote-Sitzung startet.
   - **Aktionen:** Programm installieren (winget-Suche), Nachricht senden, Neustart, Sperren.
   - Optional, später: Zeitlimits/Sperrzeiten, Verlauf.

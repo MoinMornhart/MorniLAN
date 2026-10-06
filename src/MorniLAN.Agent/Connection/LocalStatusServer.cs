@@ -8,17 +8,20 @@ using MorniLAN.Shared.Connection;
 namespace MorniLAN.Agent.Connection;
 
 /// <summary>
-/// Schickt dem Launcher seinen Status über eine Named Pipe (siehe <see cref="LocalStatusPipe"/>).
-/// Angemeldete Benutzer dürfen nur lesen: kein Schreiben, keine eigene Pipe-Instanz (gegen Pipe-Squatting).
+/// Schickt dem Launcher eine Zeile JSON über eine Named Pipe: seinen Status (<see cref="LocalStatusPipe"/>) bzw. die
+/// freigegebenen Apps (<see cref="LauncherAppsPipe"/>). Angemeldete Benutzer dürfen nur lesen: kein Schreiben,
+/// keine eigene Pipe-Instanz (gegen Pipe-Squatting).
 /// </summary>
+/// <param name="payload">Liefert die Zeile, die jeder Client bekommt.</param>
 /// <param name="grantCurrentUser">
 /// Vollzugriff für das eigene Konto. Im Dienst ist das SYSTEM; im Test aus, damit der Client (gleiches Konto)
 /// wie ein Standardbenutzer nur die Rechte der Gruppe "Authentifizierte Benutzer" bekommt.
 /// </param>
-internal sealed class LocalStatusServer(AdminConnectionService connection, ILogger<LocalStatusServer> logger,
+internal sealed class LocalStatusServer(Func<string> payload, ILogger<LocalStatusServer> logger,
     string pipeName = MorniLanConstants.LauncherPipeName, bool grantCurrentUser = true) : BackgroundService
 {
-    private static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(3);
+    // Die App-Liste mit Bildern kann einige MB groß sein
+    private static readonly TimeSpan WriteTimeout = TimeSpan.FromSeconds(10);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -29,11 +32,12 @@ internal sealed class LocalStatusServer(AdminConnectionService connection, ILogg
             {
                 pipe = NamedPipeServerStreamAcl.Create(pipeName, PipeDirection.Out,
                     NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
-                    0, 4096, CreateSecurity(grantCurrentUser));
+                    0, 64 * 1024, CreateSecurity(grantCurrentUser));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                logger.LogWarning("Statuskanal für den Launcher nicht verfügbar ({Error}), neuer Versuch in 30 s", ex.Message);
+                logger.LogWarning("Kanal {Pipe} für den Launcher nicht verfügbar ({Error}), neuer Versuch in 30 s", pipeName,
+                    ex.Message);
                 await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
                 continue;
             }
@@ -60,12 +64,16 @@ internal sealed class LocalStatusServer(AdminConnectionService connection, ILogg
             try
             {
                 await using var writer = new StreamWriter(pipe, new UTF8Encoding(false), leaveOpen: true) { AutoFlush = true };
-                await writer.WriteLineAsync(LocalStatusPipe.Serialize(connection.LocalStatus()).AsMemory(), timeout.Token);
+                await writer.WriteLineAsync(payload().AsMemory(), timeout.Token);
                 pipe.WaitForPipeDrain();
             }
             catch (Exception ex) when (ex is OperationCanceledException or IOException)
             {
                 // Launcher hat schon aufgelegt, die nächste Abfrage kommt in zwei Sekunden.
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Antwort auf {Pipe} fehlgeschlagen", pipeName);
             }
         }
     }

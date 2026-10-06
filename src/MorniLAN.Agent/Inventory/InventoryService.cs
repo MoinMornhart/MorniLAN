@@ -8,10 +8,12 @@ namespace MorniLAN.Agent.Inventory;
 
 /// <summary>Hält die aktuelle Programmliste samt Bildern bereit. Es läuft immer nur ein Einlesen gleichzeitig.</summary>
 /// <param name="covers">Cover aus dem Steam-Shop. Ohne eigene Sammelfunktion (also im echten Betrieb) automatisch an.</param>
+/// <param name="policy">Liefert die eigenen Einträge des Admins, die mit in die Liste kommen.</param>
 internal sealed class InventoryService(
     ILogger<InventoryService> logger,
     Func<InventoryCollector.Result>? collect = null,
-    StoreCoverService? covers = null)
+    StoreCoverService? covers = null,
+    Policy.AgentPolicyStore? policy = null)
 {
     private readonly ImageService _images = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -43,7 +45,7 @@ internal sealed class InventoryService(
                 var result = _collect();
                 foreach (var problem in result.Problems)
                     logger.LogWarning("Programmliste: {Problem}", problem);
-                var items = result.Items;
+                IReadOnlyList<InventoryItem> items = [.. result.Items, .. CustomItems(policy?.Current)];
                 if (_covers is not null)
                 {
                     try { items = await _covers.FillAsync(items, cancellationToken); }
@@ -68,6 +70,12 @@ internal sealed class InventoryService(
             _gate.Release();
         }
     }
+
+    /// <summary>Eigene Einträge des Admins, mit dem Icon ihrer EXE (falls es sie auf diesem PC gibt).</summary>
+    internal static IEnumerable<InventoryItem> CustomItems(AppPolicy? policy) =>
+        (policy?.CustomApps ?? []).Select(c => new InventoryItem(
+            new AppEntry(c.Id, c.Name, AppSource.Custom, ExecutablePath: c.ExecutablePath, LaunchArguments: c.Arguments),
+            new ImageSources(IconFromExecutable: c.ExecutablePath)));
 
     /// <summary>Gleich, solange sich keine Einträge ändern (die Uhrzeit des Einlesens zählt nicht mit).</summary>
     internal static string ContentHash(AppEntry[] apps) =>

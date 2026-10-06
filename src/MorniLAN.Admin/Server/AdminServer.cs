@@ -56,12 +56,14 @@ public sealed class AdminServer : IAsyncDisposable
         Registry = new DeviceRegistry(options.DataDirectory);
         Pairing = new PairingCoordinator(Registry, Identity, options.Time);
         Inventory = new InventoryStore(options.DataDirectory);
+        Policies = new PolicyStore(options.DataDirectory, options.Time);
     }
 
     public AdminIdentity Identity { get; }
     public DeviceRegistry Registry { get; }
     public PairingCoordinator Pairing { get; }
     public InventoryStore Inventory { get; }
+    public PolicyStore Policies { get; }
 
     /// <summary>Tatsächlicher Port nach dem Start.</summary>
     public int Port { get; private set; }
@@ -89,6 +91,7 @@ public sealed class AdminServer : IAsyncDisposable
         builder.Services.AddSingleton(Registry);
         builder.Services.AddSingleton(Pairing);
         builder.Services.AddSingleton(Inventory);
+        builder.Services.AddSingleton(Policies);
         builder.Services.AddSingleton(_options.Time);
         builder.Services.AddSignalR(o =>
             {
@@ -126,6 +129,7 @@ public sealed class AdminServer : IAsyncDisposable
     {
         if (!Registry.Remove(deviceId, out var connectionId))
             return;
+        Policies.Remove(deviceId);
         Log.Information("PC {DeviceId} vom Admin entkoppelt", deviceId);
         if (connectionId is null || _app is null)
             return;
@@ -141,6 +145,21 @@ public sealed class AdminServer : IAsyncDisposable
         var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
         await hub.Clients.Client(connectionId).OnInstallUpdate();
         Log.Information("Update für PC {DeviceId} angestoßen", deviceId);
+        return true;
+    }
+
+    /// <summary>
+    /// Freigaben eines PCs ändern. Gespeichert wird sofort; ist der PC online, bekommt er den neuen Stand gleich,
+    /// sonst holt er ihn beim nächsten Verbinden ab. true, wenn er gerade übertragen wurde.
+    /// </summary>
+    public async Task<bool> UpdatePolicyAsync(Guid deviceId,
+        Func<Shared.Models.AppPolicy, DateTimeOffset, Shared.Models.AppPolicy> change)
+    {
+        var policy = Policies.Update(deviceId, change);
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnPolicyChanged(policy);
         return true;
     }
 

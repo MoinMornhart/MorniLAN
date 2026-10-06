@@ -212,6 +212,71 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await StopAsync(agent);
     }
 
+    /// <summary>
+    /// M4 komplett über TLS: sperren, während der PC online ist; ändern, während er offline ist (holt er beim
+    /// Verbinden ab); eigener Eintrag kommt mit Icon in der Programmliste zurück; Entkoppeln hebt alles auf.
+    /// </summary>
+    [Fact]
+    public async Task Policy_ReachesAgent_Online_Offline_CustomApps_AndUnpair()
+    {
+        await using var admin = await StartAdminAsync(_adminDir.Path);
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path,
+            AdminHost = "127.0.0.1",
+            AdminPort = admin.Port,
+            EnableDiscovery = false,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        MorniLAN.Agent.Policy.AgentPolicyStore NewPolicyStore() => new(_agentDir.Path);
+        InventoryService NewInventory(MorniLAN.Agent.Policy.AgentPolicyStore policy) =>
+            new(NullLogger<InventoryService>.Instance, () => new InventoryCollector.Result(
+            [
+                new InventoryItem(new AppEntry("exe:discord", "Discord", AppSource.InstalledProgram,
+                    ExecutablePath: @"C:\D\Update.exe"), new ImageSources()),
+                new InventoryItem(new AppEntry("steam:427520", "Factorio", AppSource.Steam, SteamAppId: 427520), new ImageSources()),
+            ], []), policy: policy);
+
+        var policy = NewPolicyStore();
+        var agent = await StartAgentAsync(options, inventory: NewInventory(policy), policy: policy);
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        var deviceId = new AgentStateStore(_agentDir.Path).Current.DeviceId;
+        await WaitUntil(() => agent.State == AgentLinkState.Online, "online");
+
+        // 1. Online sperren: kommt sofort an und wird bestätigt
+        Assert.True(await admin.UpdatePolicyAsync(deviceId, (p, now) => p.WithAllowed(["exe:discord"], false, now)));
+        await WaitUntil(() => !policy.Current.IsAllowed("exe:discord") && admin.Policies.IsApplied(deviceId), "Sperre auf dem PC");
+
+        // 2. Eigener Eintrag: kommt in der Programmliste des PCs zurück, mit Icon aus der EXE
+        var exe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "explorer.exe"); // hat ein Icon
+        Assert.True(await admin.UpdatePolicyAsync(deviceId,
+            (p, now) => p.WithCustomApp(new CustomApp("custom:test", "Mein Tool", exe), now)));
+        await WaitUntil(() => admin.Inventory.Get(deviceId)?.Apps.Any(a => a.Id == "custom:test") == true,
+            "eigener Eintrag in der Liste");
+        var custom = admin.Inventory.Get(deviceId)!.Apps.Single(a => a.Id == "custom:test");
+        Assert.Equal(AppSource.Custom, custom.Source);
+        Assert.NotNull(custom.IconHash);
+
+        // 3. PC aus, Admin gibt Discord wieder frei: gespeichert, aber noch nicht angekommen
+        await StopAsync(agent);
+        await WaitUntil(() => admin.Registry.ConnectionIdOf(deviceId) is null, "getrennt");
+        Assert.False(await admin.UpdatePolicyAsync(deviceId, (p, now) => p.WithAllowed(["exe:discord"], true, now)));
+        Assert.False(admin.Policies.IsApplied(deviceId));
+
+        // 4. PC wieder an (neuer Prozess): holt den Stand beim Verbinden ab
+        policy = NewPolicyStore();
+        Assert.False(policy.Current.IsAllowed("exe:discord")); // bis dahin gilt der gespeicherte Stand
+        agent = await StartAgentAsync(options, inventory: NewInventory(policy), policy: policy);
+        await WaitUntil(() => policy.Current.IsAllowed("exe:discord") && admin.Policies.IsApplied(deviceId), "Stand nachgeholt");
+        Assert.Single(policy.Current.CustomApps);
+
+        // 5. Entkoppeln: ohne Admin gelten keine Freigaben mehr
+        await admin.UnpairAsync(deviceId);
+        await WaitUntil(() => policy.Current.Revision == 0 && policy.Current.CustomApps.Length == 0, "Freigaben aufgehoben");
+        await StopAsync(agent);
+    }
+
     [Fact]
     public void InventoryStore_RejectsImages_ThatDoNotMatchTheirHash()
     {
@@ -254,11 +319,13 @@ public sealed class AgentAdminConnectionTests : IDisposable
         });
 
     private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
-        DiscoveryListener? discovery = null, InventoryService? inventory = null)
+        DiscoveryListener? discovery = null, InventoryService? inventory = null,
+        MorniLAN.Agent.Policy.AgentPolicyStore? policy = null)
     {
         var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
         var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
-            identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory);
+            identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory,
+            policy: policy);
         await service.StartAsync(Ct);
         return service;
     }

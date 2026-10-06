@@ -102,7 +102,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Registry.Changed += OnServerChanged;
             server.Pairing.Changed += OnServerChanged;
             server.Inventory.Changed += OnInventoryChanged;
-            ServerStatus = $"Bereit – wartet auf PCs (Port {server.Port})";
+            server.Policies.Changed += OnPolicyChanged;
+            ServerStatus =$"Bereit – wartet auf PCs (Port {server.Port})";
             ServerDetails = $"Name im Netzwerk {server.Identity.Name} · Zertifikat {CertificateFingerprint.Short(server.Identity.Fingerprint)}";
             ServerBrush = DeviceViewModel.OnlineBrush;
             _presenceTimer.Start();
@@ -279,6 +280,8 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 
     private void OnInventoryChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.Reload(deviceId));
 
+    private void OnPolicyChanged(Guid deviceId) => Dispatcher.UIThread.Post(() => Apps.PolicyChanged(deviceId));
+
     private void Refresh()
     {
         if (_server is not { } server)
@@ -329,6 +332,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             server.Registry.Changed -= OnServerChanged;
             server.Pairing.Changed -= OnServerChanged;
             server.Inventory.Changed -= OnInventoryChanged;
+            server.Policies.Changed -= OnPolicyChanged;
             await server.DisposeAsync();
         }
     }

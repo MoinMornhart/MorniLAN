@@ -12,6 +12,8 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 - Automatische Updates über GitHub-Releases (aus M9 vorgezogen): Admin-Panel mit „Update verfügbar → Jetzt aktualisieren“, Geräte aktualisieren sich selbst (nie während eines Steam-Spiels) oder per Knopf im Panel. Setup-Prüfsumme (SHA-256) ist Pflicht. Betas werden mit angeboten.
 - Weitere Launcher (M3.2): Spiele aus Epic Games, GOG, Ubisoft Connect, EA app und Battle.net werden erkannt, ohne Dubletten und ohne DLC, mit passendem Startweg (Launcher-Link oder EXE). Im Panel erscheinen sie bei den Spielen mit Launcher-Kennzeichen.
 - Cover für Spiele ohne lokales Bild aus dem Steam-Shop (einmalig, zwischengespeichert; nur exakter Name oder anderer Editionszusatz).
+- Freigaben (M4): Schalter an jedem Spiel und Programm, Filter „Gesperrt“, „Sichtbare freigeben/sperren“ und eigene Einträge (Name + EXE-Pfad, Icon kommt vom PC). Standard: alles frei, gesperrt wird gezielt. Gilt pro PC, wird sofort oder beim nächsten Verbinden übertragen; das Panel zeigt, ob der PC den Stand hat. Der Agent speichert die Freigaben lokal.
+- Launcher: freigegebene Spiele (mit Cover) und Apps (mit Icon) als Kacheln, Klick startet sie (Steam-, Epic-, Ubisoft-Link, Store-App oder EXE). Durchgesetzt werden Sperren erst mit M6.
 
 ### Fixed
 - Admin-Panel stürzte beim Beenden ab (Stapelüberlauf: Beenden schloss das Fenster, das Schließen rief wieder Beenden auf). Betraf „Beenden“ im Infobereich und das Selbst-Update.

@@ -25,6 +25,68 @@ public class InventoryLiveTests
         Assert.NotEmpty(result.Items);
     }
 
+    /// <summary>
+    /// Stellt die beiden Launcher-Pipes unter eigenen Namen bereit, mit der echten Liste dieses PCs, ohne den Dienst
+    /// anzufassen. Launcher dazu mit MORNILAN_PIPE=MorniLAN.Preview und MORNILAN_APPS_PIPE=MorniLAN.Preview.Apps
+    /// starten. Läuft MORNILAN_PREVIEW_SECONDS lang (Standard 90). MORNILAN_PREVIEW_BLOCK: Namen, die gesperrt sind.
+    /// </summary>
+    [Fact(Explicit = true)]
+    public async Task Live_LauncherPipesForPreview()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var dir = Directory.CreateTempSubdirectory("mornilan-launcher-preview");
+        var policy = new MorniLAN.Agent.Policy.AgentPolicyStore(dir.FullName);
+        var inventory = new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance,
+            InventoryCollector.Collect, new StoreCoverService(Path.Combine(dir.FullName, "covers")), policy);
+        var report = await inventory.RefreshAsync(ct);
+        var blockNames = (Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_BLOCK") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var blocked = report.Apps.Where(a => blockNames.Contains(a.Name, StringComparer.OrdinalIgnoreCase)).Select(a => a.Id).ToList();
+        policy.Apply(MorniLAN.Shared.Models.AppPolicy.Default.WithAllowed(blocked, false, DateTimeOffset.UtcNow));
+        var catalog = new MorniLAN.Agent.Policy.LauncherCatalog(inventory, policy);
+
+        var log = Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.LocalStatusServer>.Instance;
+        using var status = new MorniLAN.Agent.Connection.LocalStatusServer(() => MorniLAN.Shared.Connection.LocalStatusPipe.Serialize(
+            new MorniLAN.Shared.Connection.AgentLocalStatus(MorniLAN.Shared.Connection.AgentLinkState.Online, null, "Vorschau-Panel",
+                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash)), log, "MorniLAN.Preview",
+            grantCurrentUser: true);
+        using var apps = new MorniLAN.Agent.Connection.LocalStatusServer(
+            () => MorniLAN.Shared.Connection.LauncherAppsPipe.Serialize(catalog.Current()), log, "MorniLAN.Preview.Apps",
+            grantCurrentUser: true);
+        await status.StartAsync(ct);
+        await apps.StartAsync(ct);
+        TestContext.Current.TestOutputHelper!.WriteLine(
+            $"{catalog.Current().Apps.Length} Kacheln, gesperrt: {string.Join(", ", blockNames)}");
+        var seconds = int.TryParse(Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_SECONDS"), out var s) ? s : 90;
+        await Task.Delay(TimeSpan.FromSeconds(seconds), ct);
+        await status.StopAsync(CancellationToken.None);
+        await apps.StopAsync(CancellationToken.None);
+        try { dir.Delete(recursive: true); } catch (IOException) { }
+    }
+
+    /// <summary>Fragt die Vorschau-Pipes wie der Launcher ab und zählt Aussetzer.</summary>
+    [Fact(Explicit = true)]
+    public async Task Live_QueryPreviewPipes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var output = TestContext.Current.TestOutputHelper!;
+        var failures = new List<string>();
+        for (var i = 0; i < 60; i++)
+        {
+            var watch = System.Diagnostics.Stopwatch.StartNew();
+            var status = await MorniLAN.Shared.Connection.LocalStatusPipe.QueryAsync(TimeSpan.FromSeconds(1.5), ct, "MorniLAN.Preview");
+            if (status is null)
+                failures.Add($"#{i} nach {watch.ElapsedMilliseconds} ms");
+            if (i % 20 == 0)
+            {
+                watch.Restart();
+                var apps = await MorniLAN.Shared.Connection.LauncherAppsPipe.QueryAsync(TimeSpan.FromSeconds(10), ct, "MorniLAN.Preview.Apps");
+                output.WriteLine($"Apps: {apps?.Apps.Length.ToString() ?? "FEHLT"} in {watch.ElapsedMilliseconds} ms");
+            }
+            await Task.Delay(200, ct);
+        }
+        output.WriteLine($"Status-Aussetzer: {failures.Count} von 60 {string.Join(", ", failures)}");
+    }
+
     /// <summary>Holt echte Cover aus dem Steam-Shop (braucht Internet).</summary>
     [Fact(Explicit = true)]
     public async Task Live_StoreCovers()

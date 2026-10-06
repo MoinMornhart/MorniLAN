@@ -28,6 +28,10 @@ public static class ConnectionDefaults
 
     /// <summary>Größtes erlaubtes Bild (Cover sind auf 300×450 verkleinert, das reicht großzügig).</summary>
     public const int MaxImageBytes = 512 * 1024;
+
+    /// <summary>Höchstens so viele Ausnahmen und eigene Einträge je PC.</summary>
+    public const int MaxPolicyRules = 5000;
+    public const int MaxCustomApps = 200;
 }
 
 /// <summary>Methoden, die der Agent im Admin-Panel aufruft (SignalR-Hub).</summary>
@@ -53,6 +57,15 @@ public interface IAdminHub
 
     /// <summary>Stand des automatischen Updates (prüft, lädt, wartet auf Spielende, …).</summary>
     Task ReportUpdateState(Updates.AgentUpdateState state);
+
+    /// <summary>
+    /// Aktuelle Freigaben für diesen PC, gleich nach dem Verbinden abgefragt (danach schiebt das Panel Änderungen
+    /// mit <see cref="IAgentClient.OnPolicyChanged"/>). Panels vor 0.3.0-beta.6 kennen die Methode nicht.
+    /// </summary>
+    Task<AppPolicy> GetPolicy();
+
+    /// <summary>Der Agent hat diesen Stand gespeichert und wendet ihn an.</summary>
+    Task ReportPolicyApplied(long revision);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -72,6 +85,9 @@ public interface IAgentClient
 
     /// <summary>Der Admin möchte das Update jetzt (statt erst beim nächsten Prüfen).</summary>
     Task OnInstallUpdate();
+
+    /// <summary>Der Admin hat Freigaben geändert.</summary>
+    Task OnPolicyChanged(AppPolicy policy);
 }
 
 public enum HelloStatus
