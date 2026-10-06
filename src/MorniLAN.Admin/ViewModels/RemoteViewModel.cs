@@ -1,7 +1,9 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MorniLAN.Admin.Platform;
 using MorniLAN.Admin.Server;
 using MorniLAN.Shared.Models;
 
@@ -26,6 +28,8 @@ public sealed partial class RemoteViewModel : ObservableObject
     [ObservableProperty] public partial bool IsActive { get; set; }
     [ObservableProperty] public partial bool InputLocked { get; set; }
     [ObservableProperty] public partial string MoonlightHint { get; set; } = "";
+    [ObservableProperty] public partial bool MoonlightMissing { get; set; }
+    private string? _moonlightStartedFor;
 
     partial void OnSelectedDeviceChanged(DeviceChoice? value)
     {
@@ -91,9 +95,50 @@ public sealed partial class RemoteViewModel : ObservableObject
             RemoteSessionPhase.Unavailable => (state.Message, DeviceViewModel.ErrorBrush),
             _ => (online ? "Bereit. „Verbinden“ startet den Fernzugriff." : "Der PC ist gerade nicht online.", DeviceViewModel.OfflineBrush),
         };
-        MoonlightHint = state is { Phase: RemoteSessionPhase.Active, Host: { } host }
-            ? $"Mit Moonlight verbinden: {host}"
-            : "";
+        if (state is { Phase: RemoteSessionPhase.Active, Host: { } host })
+        {
+            if (MoonlightLauncher.IsInstalled())
+            {
+                MoonlightMissing = false;
+                // Moonlight automatisch öffnen – aber nur einmal je Sitzung (Load läuft regelmäßig)
+                if (_moonlightStartedFor != host)
+                {
+                    _moonlightStartedFor = host;
+                    MoonlightLauncher.TryStream(host);
+                }
+                MoonlightHint = $"Moonlight geöffnet ({host}). Beim allerersten Mal die angezeigte PIN in Sunshine bestätigen.";
+            }
+            else
+            {
+                MoonlightMissing = true;
+                MoonlightHint = "Moonlight ist auf diesem PC noch nicht installiert – einmal installieren, dann öffnet sich der Fernzugriff automatisch.";
+            }
+        }
+        else
+        {
+            _moonlightStartedFor = null;
+            MoonlightMissing = false;
+            MoonlightHint = "";
+        }
+    }
+
+    /// <summary>Moonlight einmalig per winget installieren (läuft im Benutzerkontext des Panels).</summary>
+    [RelayCommand]
+    private void InstallMoonlight()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("winget",
+                $"install --id {MoonlightLauncher.WingetId} --silent --accept-package-agreements --accept-source-agreements")
+            {
+                UseShellExecute = true,
+            });
+            MoonlightHint = "Moonlight wird installiert … danach erneut „Verbinden“ drücken.";
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            MoonlightHint = "Moonlight-Installer ließ sich nicht starten. Bitte Moonlight von moonlight-stream.org installieren.";
+        }
     }
 
     [RelayCommand]
