@@ -567,11 +567,15 @@
                 <TextBlock Grid.Column="1" Margin="10,0" Text="{Binding Remote.StatusText}" VerticalAlignment="Center"
                            TextWrapping="Wrap" />
               </Grid>
-              <TextBlock Text="{Binding Remote.MoonlightHint}" FontWeight="SemiBold" IsVisible="{Binding Remote.IsActive}" />
+              <TextBlock Text="{Binding Remote.MoonlightHint}" FontWeight="SemiBold" TextWrapping="Wrap"
+                         IsVisible="{Binding Remote.IsActive}" />
 
               <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button Content="Verbinden" Classes="accent" Command="{Binding Remote.ConnectCommand}"
                         IsVisible="{Binding Remote.CanConnect}" />
+                <Button Content="Moonlight installieren" Command="{Binding Remote.InstallMoonlightCommand}"
+                        IsVisible="{Binding Remote.MoonlightMissing}"
+                        ToolTip.Tip="Einmalig auf diesem Admin-PC – danach startet der Fernzugriff automatisch" />
                 <Button Content="Trennen" Command="{Binding Remote.DisconnectCommand}" IsVisible="{Binding Remote.IsActive}" />
                 <ToggleSwitch IsChecked="{Binding Remote.InputLocked}" IsVisible="{Binding Remote.IsActive}"
                               Command="{Binding Remote.ToggleInputLockCommand}"
