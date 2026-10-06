@@ -36,14 +36,23 @@ public class InventoryLiveTests
         var ct = TestContext.Current.CancellationToken;
         var dir = Directory.CreateTempSubdirectory("mornilan-launcher-preview");
         var policy = new MorniLAN.Agent.Policy.AgentPolicyStore(dir.FullName);
+        // MORNILAN_PREVIEW_SAMPLES=1: zusätzlich Beispiel-Spiele (für hübsche Launcher-Screenshots)
+        var withSamples = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_SAMPLES") == "1";
+        Func<InventoryCollector.Result> collect = withSamples
+            ? () => { var r = InventoryCollector.Collect(); return r with { Items = [.. r.Items, .. SampleLauncherGames()] }; }
+            : InventoryCollector.Collect;
         var inventory = new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance,
-            InventoryCollector.Collect, new StoreCoverService(Path.Combine(dir.FullName, "covers")), policy);
+            collect, new StoreCoverService(Path.Combine(dir.FullName, "covers")), policy);
         var report = await inventory.RefreshAsync(ct);
         var blockNames = (Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_BLOCK") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries);
         var blocked = report.Apps.Where(a => blockNames.Contains(a.Name, StringComparer.OrdinalIgnoreCase)).Select(a => a.Id).ToList();
         policy.Apply(MorniLAN.Shared.Models.AppPolicy.Default.WithAllowed(blocked, false, DateTimeOffset.UtcNow));
         // Profile und Briefkasten (M5): Launcher dazu mit MORNILAN_INBOX=<MORNILAN_PREVIEW_USER>\AppData\Local\MorniLAN\launcher\inbox
         var profiles = new MorniLAN.Agent.Policy.AgentProfileStore(dir.FullName);
+        // MORNILAN_PREVIEW_PROFILES="Lena,Max": legt Profile an, damit der Launcher „Wer spielt?" zeigt
+        foreach (var name in (Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_PROFILES") ?? "")
+                     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            profiles.Add(name, MorniLAN.Shared.Models.ProfileColors.All[profiles.Current.Length % MorniLAN.Shared.Models.ProfileColors.All.Length]);
         var previewUser = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_USER")
                           ?? Path.Combine(Path.GetTempPath(), "mornilan-preview-user");
         // Fernzugriff (M7): MORNILAN_PREVIEW_REMOTE=ask zeigt die Erlauben-Abfrage, =active den aktiven Balken
@@ -252,7 +261,9 @@ public class InventoryLiveTests
         ];
         return games.Select(g => new InventoryItem(
             new MorniLAN.Shared.Models.AppEntry(MorniLAN.Shared.Models.AppId.ForLauncher(g.Prefix, g.Name), g.Name,
-                MorniLAN.Shared.Models.AppSource.InstalledProgram, Publisher: "Beispiel für die Vorschau", Launcher: g.Launcher),
+                MorniLAN.Shared.Models.AppSource.InstalledProgram, Publisher: "Beispiel für die Vorschau", Launcher: g.Launcher,
+                // Startziel nur für die Vorschau, damit die Beispiel-Spiele als Kachel erscheinen (nicht wirklich startbar)
+                LaunchUri: $"mornilan-demo://{g.Prefix}/start"),
             new ImageSources()));
     }
 }
