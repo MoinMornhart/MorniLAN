@@ -83,6 +83,7 @@ Adressen ein, die das Panel unter „Neuen PC hinzufügen“ anzeigt:
 
 Vorabversionen (`-beta`) zeigt GitHub nicht als „neueste Version“ an, sie stehen aber in der Liste der Releases.
 Ausführliche Anleitung mit Fehlersuche: [docs/einrichtung.md](docs/einrichtung.md).
+Alle Funktionen Schritt für Schritt erklärt: [**Admin-Handbuch**](docs/handbuch.md).
 
 ## Was MorniLAN kann
 
@@ -165,7 +166,7 @@ Technische Entscheidungen:
 | Sperren | App Control (WDAC) bzw. AppLocker je nach Edition, dazu ein Prozess-Wächter | Windows Home und Pro |
 | Updates | eigene Setups (Inno Setup) über GitHub Releases, Prüfsumme Pflicht | dieselben Setups wie bei der Erstinstallation |
 
-Mehr: [Anforderungen](docs/anforderungen.md), [Verbindung](docs/verbindung.md).
+Mehr: [Admin-Handbuch](docs/handbuch.md), [Anforderungen](docs/anforderungen.md), [Verbindung](docs/verbindung.md).
 </details>
 
 <details>
