@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private readonly LauncherViewModel _viewModel = new();
     private readonly bool _fullscreen;
     private readonly Gamepad _gamepad = new();
+    private readonly InputLock _inputLock = new();
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _systemTimer = new() { Interval = TimeSpan.FromSeconds(10) };
@@ -37,6 +38,7 @@ public partial class MainWindow : Window
 
         _viewModel.FocusRequested += () => Dispatcher.UIThread.Post(FocusDefault, DispatcherPriority.Background);
         _viewModel.PickImageFile = PickImageFileAsync;
+        _viewModel.SetInputLock = locked => Dispatcher.UIThread.Post(() => _inputLock.Set(locked));
         _refreshTimer.Tick += async (_, _) => await _viewModel.RefreshAsync();
         _clockTimer.Tick += (_, _) => _viewModel.UpdateClock();
         _systemTimer.Tick += async (_, _) => await _viewModel.UpdateSystemAsync();
@@ -60,6 +62,7 @@ public partial class MainWindow : Window
             _clockTimer.Stop();
             _systemTimer.Stop();
             _padTimer.Stop();
+            _inputLock.Dispose(); // Eingaben nie gesperrt lassen, wenn der Launcher endet
         };
     }
 

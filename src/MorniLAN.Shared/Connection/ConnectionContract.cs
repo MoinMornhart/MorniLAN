@@ -78,6 +78,9 @@ public interface IAdminHub
 
     /// <summary>Stand der Sperren auf dem PC: angewandt, oder eine Meldung, falls etwas nicht ging.</summary>
     Task ReportRestrictionState(RestrictionState state);
+
+    /// <summary>Stand des Fernzugriffs (angefragt, läuft, abgelehnt …), für die Anzeige im Panel.</summary>
+    Task ReportRemoteState(RemoteSessionState state);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -112,6 +115,15 @@ public interface IAgentClient
 
     /// <summary>Der Admin setzt das Passwort eines Profils zurück (der Nutzer hat es vergessen).</summary>
     Task OnResetProfilePassword(string profileId);
+
+    /// <summary>Der Admin möchte eine Fernzugriffs-Sitzung starten.</summary>
+    Task OnStartRemote(bool allowWithoutConsent);
+
+    /// <summary>Der Admin beendet die Fernzugriffs-Sitzung.</summary>
+    Task OnStopRemote();
+
+    /// <summary>Maus und Tastatur des Freundes während der Sitzung sperren oder freigeben.</summary>
+    Task OnSetInputLock(bool locked);
 }
 
 public enum HelloStatus

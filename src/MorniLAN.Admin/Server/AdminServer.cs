@@ -60,10 +60,12 @@ public sealed class AdminServer : IAsyncDisposable
         Policies = new PolicyStore(options.DataDirectory, options.Time);
         Profiles = new DeviceProfileStore(options.DataDirectory);
         Accounts = new DeviceAccountStore(options.DataDirectory);
+        Remote = new RemoteAccessStore(options.DataDirectory);
     }
 
     public DeviceProfileStore Profiles { get; }
     public DeviceAccountStore Accounts { get; }
+    public RemoteAccessStore Remote { get; }
     public HelpInbox Help { get; } = new();
 
     public AdminIdentity Identity { get; }
@@ -101,6 +103,7 @@ public sealed class AdminServer : IAsyncDisposable
         builder.Services.AddSingleton(Policies);
         builder.Services.AddSingleton(Profiles);
         builder.Services.AddSingleton(Accounts);
+        builder.Services.AddSingleton(Remote);
         builder.Services.AddSingleton(Help);
         builder.Services.AddSingleton(_options.Time);
         builder.Services.AddSignalR(o =>
@@ -142,6 +145,7 @@ public sealed class AdminServer : IAsyncDisposable
         Policies.Remove(deviceId);
         Profiles.Remove(deviceId);
         Accounts.Remove(deviceId);
+        Remote.Remove(deviceId);
         Log.Information("PC {DeviceId} vom Admin entkoppelt", deviceId);
         if (connectionId is null || _app is null)
             return;
@@ -183,6 +187,30 @@ public sealed class AdminServer : IAsyncDisposable
         var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
         await hub.Clients.Client(connectionId).OnCreateProfile(
             new LauncherProfile(LauncherProfile.NewId(), name.Trim(), ProfileColors.Normalize(color), DateTimeOffset.UtcNow));
+        return true;
+    }
+
+    /// <summary>Fernzugriff auf einem PC starten. Nutzt die Einstellung „ohne Rückfrage erlauben“ des PCs.</summary>
+    public async Task<bool> StartRemoteAsync(Guid deviceId)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnStartRemote(Remote.Settings(deviceId).AllowWithoutConsent);
+        return true;
+    }
+
+    public async Task<bool> StopRemoteAsync(Guid deviceId) => await SendRemote(deviceId, c => c.OnStopRemote());
+
+    public async Task<bool> SetInputLockAsync(Guid deviceId, bool locked) =>
+        await SendRemote(deviceId, c => c.OnSetInputLock(locked));
+
+    private async Task<bool> SendRemote(Guid deviceId, Func<IAgentClient, Task> call)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await call(hub.Clients.Client(connectionId));
         return true;
     }
 

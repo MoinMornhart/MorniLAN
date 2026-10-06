@@ -30,7 +30,8 @@ internal sealed class AdminConnectionService(
     Policy.LauncherCatalog? catalog = null,
     Policy.AgentProfileStore? profiles = null,
     Policy.LauncherInboxService? inbox = null,
-    Restrictions.RestrictionService? restrictions = null) : BackgroundService
+    Restrictions.RestrictionService? restrictions = null,
+    Remote.RemoteAccessService? remote = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -57,7 +58,7 @@ internal sealed class AdminConnectionService(
                 ? Shared.Connection.PairingCode.Format(code)
                 : null,
             AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow, catalog?.Current().Hash,
-            inbox?.Help);
+            inbox?.Help, remote?.State);
 
     public event Action<AgentLinkState>? StateChanged;
 
@@ -149,6 +150,9 @@ internal sealed class AdminConnectionService(
             if (profiles?.ClearPassword(id) == true)
                 logger.LogInformation("Passwort von Profil {Id} vom Admin zurückgesetzt", id);
         });
+        connection.On<bool>(nameof(IAgentClient.OnStartRemote), allow => remote?.Start(allow));
+        connection.On(nameof(IAgentClient.OnStopRemote), () => remote?.Stop());
+        connection.On<bool>(nameof(IAgentClient.OnSetInputLock), locked => remote?.SetInputLock(locked));
         connection.On<AppPolicy>(nameof(IAgentClient.OnPolicyChanged), async received =>
         {
             try { await ApplyPolicyAsync(connection, received, authoritative: false, refreshRequested, stoppingToken); }
@@ -273,6 +277,16 @@ internal sealed class AdminConnectionService(
                 ReportAccounts(restrictions.Accounts);
                 ReportRestrictions(restrictions.State);
             }
+
+            void ReportRemote(RemoteSessionState state) =>
+                _ = connection.InvokeAsync(nameof(IAdminHub.ReportRemoteState), state, session.Token)
+                    .ContinueWith(t => logger.LogDebug("Fernzugriff-Stand nicht gemeldet: {Error}", t.Exception?.GetBaseException().Message),
+                        TaskContinuationOptions.OnlyOnFaulted);
+            if (remote is not null)
+            {
+                remote.StateChanged += ReportRemote;
+                ReportRemote(remote.State);
+            }
             try
             {
                 await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
@@ -288,6 +302,8 @@ internal sealed class AdminConnectionService(
                     restrictions.AccountsChanged -= ReportAccounts;
                     restrictions.StateChanged -= ReportRestrictions;
                 }
+                if (remote is not null)
+                    remote.StateChanged -= ReportRemote;
                 if (updates is not null)
                     updates.StateChanged -= ReportUpdate;
                 await session.CancelAsync();

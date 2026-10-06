@@ -83,6 +83,7 @@ builder.Services.AddSingleton(sp =>
         resume: () => { try { File.Delete(paused); } catch (IOException) { } catch (UnauthorizedAccessException) { } });
 });
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RestrictionService>());
+builder.Services.AddSingleton<MorniLAN.Agent.Remote.RemoteAccessService>();
 builder.Services.AddSingleton<AgentUpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
 builder.Services.AddSingleton<DiscoveryListener>();

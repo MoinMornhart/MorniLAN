@@ -490,6 +490,42 @@
           </StackPanel>
         </StackPanel>
 
+        <!-- Fernzugriff -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsRemote}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Fernzugriff" FontSize="28" FontWeight="SemiBold" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Remote.Devices}" SelectedItem="{Binding Remote.SelectedDevice}"
+                      MinWidth="160" PlaceholderText="PC wählen" />
+          </Grid>
+          <TextBlock Classes="muted" TextWrapping="Wrap"
+                     Text="Auf den Bildschirm des PCs zugreifen (Streaming mit Sunshine + Moonlight). Der Freund sieht am PC immer deutlich, dass gerade zugegriffen wird." />
+
+          <Border Classes="card" IsVisible="{Binding Remote.HasDevice}">
+            <StackPanel Spacing="14">
+              <Grid ColumnDefinitions="Auto,*">
+                <Ellipse Width="10" Height="10" Fill="{Binding Remote.StatusBrush}" VerticalAlignment="Center" />
+                <TextBlock Grid.Column="1" Margin="10,0" Text="{Binding Remote.StatusText}" VerticalAlignment="Center"
+                           TextWrapping="Wrap" />
+              </Grid>
+              <TextBlock Text="{Binding Remote.MoonlightHint}" FontWeight="SemiBold" IsVisible="{Binding Remote.IsActive}" />
+
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Verbinden" Classes="accent" Command="{Binding Remote.ConnectCommand}"
+                        IsVisible="{Binding Remote.CanConnect}" />
+                <Button Content="Trennen" Command="{Binding Remote.DisconnectCommand}" IsVisible="{Binding Remote.IsActive}" />
+                <ToggleSwitch IsChecked="{Binding Remote.InputLocked}" IsVisible="{Binding Remote.IsActive}"
+                              Command="{Binding Remote.ToggleInputLockCommand}"
+                              OnContent="Maus/Tastatur gesperrt" OffContent="Maus/Tastatur frei" />
+              </StackPanel>
+
+              <ToggleSwitch IsChecked="{Binding Remote.AllowWithoutConsent}"
+                            OnContent="Ohne Rückfrage erlauben (startet sofort)" OffContent="Immer am PC nachfragen" />
+              <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
+                         Text="Ist das Häkchen aus, erscheint am PC des Freundes eine Abfrage „Erlauben/Ablehnen“. Mit Häkchen startet der Fernzugriff sofort – am PC bleibt der deutliche Hinweis trotzdem sichtbar." />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
         <!-- Diagnose -->
         <StackPanel Spacing="16" IsVisible="{Binding IsDiagnostics}">
           <Grid ColumnDefinitions="*,Auto">

@@ -423,15 +423,49 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await StopAsync(agent);
     }
 
+    /// <summary>M7 über TLS: Panel startet Fernzugriff (ohne Rückfrage), Agent wird aktiv und meldet den Stand; Eingabesperre; Trennen.</summary>
+    [Fact]
+    public async Task Remote_StartWithoutConsent_InputLock_Stop()
+    {
+        await using var admin = await StartAdminAsync(_adminDir.Path);
+        var remote = new MorniLAN.Agent.Remote.RemoteAccessService(
+            NullLogger<MorniLAN.Agent.Remote.RemoteAccessService>.Instance,
+            ensureSunshine: () => true, sunshineInstalled: () => true, hostAddress: () => "10.0.0.5:47989");
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path, AdminHost = "127.0.0.1", AdminPort = admin.Port,
+            EnableDiscovery = false, HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        var agent = await StartAgentAsync(options, remote: remote);
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        var deviceId = new AgentStateStore(_agentDir.Path).Current.DeviceId;
+        await WaitUntil(() => agent.State == AgentLinkState.Online, "online");
+
+        admin.Remote.SetAllowWithoutConsent(deviceId, true);
+        Assert.True(await admin.StartRemoteAsync(deviceId));
+        await WaitUntil(() => admin.Remote.State(deviceId).Phase == RemoteSessionPhase.Active, "Fernzugriff aktiv im Panel");
+        Assert.Equal("10.0.0.5:47989", admin.Remote.State(deviceId).Host);
+
+        Assert.True(await admin.SetInputLockAsync(deviceId, true));
+        await WaitUntil(() => admin.Remote.State(deviceId).InputLocked, "Eingabe gesperrt");
+
+        Assert.True(await admin.StopRemoteAsync(deviceId));
+        await WaitUntil(() => admin.Remote.State(deviceId).Phase == RemoteSessionPhase.Idle, "beendet");
+
+        await StopAsync(agent);
+    }
+
     private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
         DiscoveryListener? discovery = null, InventoryService? inventory = null,
         MorniLAN.Agent.Policy.AgentPolicyStore? policy = null, MorniLAN.Agent.Policy.AgentProfileStore? profiles = null,
-        MorniLAN.Agent.Policy.LauncherInboxService? inbox = null, MorniLAN.Agent.Restrictions.RestrictionService? restrictions = null)
+        MorniLAN.Agent.Policy.LauncherInboxService? inbox = null, MorniLAN.Agent.Restrictions.RestrictionService? restrictions = null,
+        MorniLAN.Agent.Remote.RemoteAccessService? remote = null)
     {
         var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
         var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
             identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory,
-            policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions);
+            policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions, remote: remote);
         await service.StartAsync(Ct);
         return service;
     }
