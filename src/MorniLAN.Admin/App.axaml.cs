@@ -28,6 +28,7 @@ public partial class App : Application
             _viewModel = new MainViewModel();
             var viewModel = _viewModel;
             viewModel.RequestExit = () => Dispatcher.UIThread.Post(Exit);
+            viewModel.RequestShow = () => Dispatcher.UIThread.Post(ShowWindow);
             // Server außerhalb des UI-Threads stoppen, sonst blockieren sich die Fortsetzungen gegenseitig.
             desktop.Exit += (_, _) => Task.Run(() => viewModel.DisposeAsync().AsTask()).Wait(TimeSpan.FromSeconds(5));
 

@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Server.Kestrel.Https;
 using Microsoft.AspNetCore.SignalR;
 using MorniLAN.Shared;
 using MorniLAN.Shared.Connection;
+using MorniLAN.Shared.Models;
 using MorniLAN.Shared.Security;
 using Serilog;
 
@@ -57,7 +58,11 @@ public sealed class AdminServer : IAsyncDisposable
         Pairing = new PairingCoordinator(Registry, Identity, options.Time);
         Inventory = new InventoryStore(options.DataDirectory);
         Policies = new PolicyStore(options.DataDirectory, options.Time);
+        Profiles = new DeviceProfileStore(options.DataDirectory);
     }
+
+    public DeviceProfileStore Profiles { get; }
+    public HelpInbox Help { get; } = new();
 
     public AdminIdentity Identity { get; }
     public DeviceRegistry Registry { get; }
@@ -92,6 +97,8 @@ public sealed class AdminServer : IAsyncDisposable
         builder.Services.AddSingleton(Pairing);
         builder.Services.AddSingleton(Inventory);
         builder.Services.AddSingleton(Policies);
+        builder.Services.AddSingleton(Profiles);
+        builder.Services.AddSingleton(Help);
         builder.Services.AddSingleton(_options.Time);
         builder.Services.AddSignalR(o =>
             {
@@ -130,6 +137,7 @@ public sealed class AdminServer : IAsyncDisposable
         if (!Registry.Remove(deviceId, out var connectionId))
             return;
         Policies.Remove(deviceId);
+        Profiles.Remove(deviceId);
         Log.Information("PC {DeviceId} vom Admin entkoppelt", deviceId);
         if (connectionId is null || _app is null)
             return;
@@ -160,6 +168,29 @@ public sealed class AdminServer : IAsyncDisposable
             return false;
         var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
         await hub.Clients.Client(connectionId).OnPolicyChanged(policy);
+        return true;
+    }
+
+    /// <summary>Profil auf dem PC anlegen. Geht nur, solange er online ist (der PC verwaltet seine Profile).</summary>
+    public async Task<bool> CreateProfileAsync(Guid deviceId, string name, string color)
+    {
+        if (LauncherProfile.ValidateName(name) is not null || Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnCreateProfile(
+            new LauncherProfile(LauncherProfile.NewId(), name.Trim(), ProfileColors.Normalize(color), DateTimeOffset.UtcNow));
+        return true;
+    }
+
+    /// <summary>Profil löschen, samt seiner eigenen Freigaben. Geht nur, solange der PC online ist.</summary>
+    public async Task<bool> DeleteProfileAsync(Guid deviceId, string profileId)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnDeleteProfile(profileId);
+        if (Policies.Get(deviceId).ProfileRules?.Any(p => p.ProfileId == profileId) == true)
+            await UpdatePolicyAsync(deviceId, (p, now) => p.WithoutProfile(profileId, now));
         return true;
     }
 

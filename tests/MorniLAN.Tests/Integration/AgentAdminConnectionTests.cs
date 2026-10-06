@@ -318,14 +318,70 @@ public sealed class AgentAdminConnectionTests : IDisposable
             HeartbeatInterval = TimeSpan.FromMilliseconds(300),
         });
 
+    /// <summary>
+    /// M5 über TLS: Profil im Launcher angelegt (Briefkasten) kommt im Panel an; Panel legt eins an und löscht es;
+    /// „Hilfe anfordern“ erscheint im Panel, auch wenn das Panel beim Drücken noch aus war.
+    /// </summary>
+    [Fact]
+    public async Task Profiles_And_HelpRequests_ReachTheAdmin()
+    {
+        var user = Path.Combine(_agentDir.Path, "Users", "Freund");
+        var inboxFolder = LauncherInbox.FolderFor(user);
+        var policy = new MorniLAN.Agent.Policy.AgentPolicyStore(_agentDir.Path);
+        var profiles = new MorniLAN.Agent.Policy.AgentProfileStore(_agentDir.Path);
+        var inbox = new MorniLAN.Agent.Policy.LauncherInboxService(profiles, policy,
+            NullLogger<MorniLAN.Agent.Policy.LauncherInboxService>.Instance, () => [user]);
+
+        // Hilfe gedrückt, bevor es überhaupt ein Panel gibt: wartet
+        LauncherInbox.WriteHelpRequest(inboxFolder, new LauncherInbox.HelpMessage("Lena"));
+        inbox.ProcessOnce();
+        Assert.NotNull(inbox.PendingHelp);
+
+        await using var admin = await StartAdminAsync(_adminDir.Path);
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path,
+            AdminHost = "127.0.0.1",
+            AdminPort = admin.Port,
+            EnableDiscovery = false,
+            HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        var agent = await StartAgentAsync(options, policy: policy, profiles: profiles, inbox: inbox);
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        var deviceId = new AgentStateStore(_agentDir.Path).Current.DeviceId;
+
+        // Wartende Hilfe kommt nach dem Verbinden an
+        await WaitUntil(() => admin.Help.Open.Count == 1 && inbox.Help?.Delivered == true, "Hilfe nachgereicht");
+        Assert.Equal("Lena", admin.Help.Open[0].Request.ProfileName);
+
+        // Profil im Launcher angelegt
+        LauncherInbox.WriteProfileRequest(inboxFolder, new LauncherInbox.ProfileRequest("Lena", "#3DDC84"));
+        inbox.ProcessOnce();
+        await WaitUntil(() => admin.Profiles.Get(deviceId).Any(p => p.Name == "Lena"), "Profil im Panel");
+
+        // Panel legt eins an und löscht es wieder (samt eigener Freigaben)
+        Assert.True(await admin.CreateProfileAsync(deviceId, "Max", "#4C8DFF"));
+        await WaitUntil(() => profiles.Current.Any(p => p.Name == "Max") && admin.Profiles.Get(deviceId).Length == 2, "Profil vom Panel");
+        var max = profiles.Current.Single(p => p.Name == "Max");
+        await admin.UpdatePolicyAsync(deviceId, (p, now) => p.WithAllowedForProfile(max.Id, ["steam:1"], false, now));
+        await WaitUntil(() => !policy.Current.IsAllowed("steam:1", max.Id), "Regel für Max");
+        Assert.True(await admin.DeleteProfileAsync(deviceId, max.Id));
+        await WaitUntil(() => profiles.Current.All(p => p.Id != max.Id) && policy.Current.ProfileRules is not { Length: > 0 },
+            "Profil und Regeln gelöscht");
+
+        await StopAsync(agent);
+    }
+
     private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
         DiscoveryListener? discovery = null, InventoryService? inventory = null,
-        MorniLAN.Agent.Policy.AgentPolicyStore? policy = null)
+        MorniLAN.Agent.Policy.AgentPolicyStore? policy = null, MorniLAN.Agent.Policy.AgentProfileStore? profiles = null,
+        MorniLAN.Agent.Policy.LauncherInboxService? inbox = null)
     {
         var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
         var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
             identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory,
-            policy: policy);
+            policy: policy, profiles: profiles, inbox: inbox);
         await service.StartAsync(Ct);
         return service;
     }

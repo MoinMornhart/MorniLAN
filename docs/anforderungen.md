@@ -44,6 +44,8 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
 - Eine Leiste mit Uhrzeit, Lautstärke, WLAN, Abmelden/Neustart/Herunterfahren und einem **„Hilfe anfordern“**-Button, der dem Admin eine Benachrichtigung schickt.
 - Zeigt **deutlich sichtbar** an, wenn gerade eine Fernzugriffs-Sitzung läuft (Transparenz gegenüber dem Freund).
 - Kommuniziert nur lokal mit dem Agent (Named Pipe) und braucht keine Admin-Rechte.
+- **Entschieden (M5, Nutzer 2026-10-06):** **Vollbild über dem Desktop** statt Shell-Ersatz (Autostart per `HKLM\…\Run` mit `--autostart`, in Administratorkonten beendet er sich sofort; Alt+F4 wirkt nicht, nur Abmelden/Herunterfahren). Das Abschotten des Desktops übernimmt M6. **Profile schon in M5**: „Wer spielt?“ beim Start, Profile entstehen am PC (auch offline) oder im Panel, Freigaben je Profil gehen denen des PCs vor, das Anlegen am PC kann der Admin sperren. **Steam & Co. verknüpfen kommt nicht in M5**: Kontowechsel ginge nur über Steams Anmeldedateien, die MorniLAN laut Datenschutzregel nicht anfasst (Thema für M10). Dazu Controller (XInput), Suche, „Zuletzt gespielt“, Leiste, „Hilfe anfordern“.
+- Rückweg Launcher → Agent über einen **Briefkasten** im Benutzerordner (`%LOCALAPPDATA%\MorniLAN\launcher\inbox`), nicht über die Pipe (die bleibt nur lesbar). Der Agent (SYSTEM) liest dort nur frische, kleine Dateien, folgt keinen Junctions/Symlinks und löscht nichts (sonst könnte ein Benutzer SYSTEM per Junction Dateien in Systemordnern löschen lassen); aufräumen tut der Launcher.
 
 ### 3. MorniLAN.Admin (Admin-Panel)
 

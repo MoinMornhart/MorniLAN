@@ -27,7 +27,9 @@ internal sealed class AdminConnectionService(
     InventoryService? inventory = null,
     Updates.AgentUpdateService? updates = null,
     Policy.AgentPolicyStore? policy = null,
-    Policy.LauncherCatalog? catalog = null) : BackgroundService
+    Policy.LauncherCatalog? catalog = null,
+    Policy.AgentProfileStore? profiles = null,
+    Policy.LauncherInboxService? inbox = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -53,7 +55,8 @@ internal sealed class AdminConnectionService(
         new(State, State == AgentLinkState.WaitingForPairing && PairingCode is { } code
                 ? Shared.Connection.PairingCode.Format(code)
                 : null,
-            AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow, catalog?.Current().Hash);
+            AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow, catalog?.Current().Hash,
+            inbox?.Help);
 
     public event Action<AgentLinkState>? StateChanged;
 
@@ -129,6 +132,16 @@ internal sealed class AdminConnectionService(
                 refreshRequested.Release();
         });
         connection.On(nameof(IAgentClient.OnInstallUpdate), () => updates?.RequestNow());
+        connection.On<LauncherProfile>(nameof(IAgentClient.OnCreateProfile), p =>
+        {
+            if (profiles?.Add(p.Name, p.Color, p.Id, p.CreatedAt) is { } added)
+                logger.LogInformation("Profil „{Name}“ vom Admin angelegt", added.Name);
+        });
+        connection.On<string>(nameof(IAgentClient.OnDeleteProfile), id =>
+        {
+            if (profiles?.Remove(id) == true)
+                logger.LogInformation("Profil {Id} vom Admin gelöscht", id);
+        });
         connection.On<AppPolicy>(nameof(IAgentClient.OnPolicyChanged), async received =>
         {
             try { await ApplyPolicyAsync(connection, received, authoritative: false, refreshRequested, stoppingToken); }
@@ -210,12 +223,42 @@ internal sealed class AdminConnectionService(
                 updates.StateChanged += ReportUpdate;
                 ReportUpdate(updates.State);
             }
+
+            // Profile und Hilfe-Anfragen: jetzt einmal, danach bei jeder Änderung. Ältere Panels kennen das nicht.
+            void ReportProfiles(LauncherProfile[] current) =>
+                _ = connection.InvokeAsync(nameof(IAdminHub.ReportProfiles), current, session.Token)
+                    .ContinueWith(t => logger.LogDebug("Profile nicht gemeldet: {Error}", t.Exception?.GetBaseException().Message),
+                        TaskContinuationOptions.OnlyOnFaulted);
+            void SendHelp(HelpRequest request) =>
+                _ = connection.InvokeAsync(nameof(IAdminHub.RequestHelp), request, session.Token)
+                    .ContinueWith(t =>
+                    {
+                        if (t.IsCompletedSuccessfully)
+                            inbox?.MarkDelivered(request.Id);
+                        else
+                            logger.LogInformation("Hilfe-Anfrage noch nicht angekommen: {Error}", t.Exception?.GetBaseException().Message);
+                    }, TaskScheduler.Default);
+            if (profiles is not null)
+            {
+                profiles.Changed += ReportProfiles;
+                ReportProfiles(profiles.Current);
+            }
+            if (inbox is not null)
+            {
+                inbox.HelpRequested += SendHelp;
+                if (inbox.PendingHelp is { } waiting)
+                    SendHelp(waiting);
+            }
             try
             {
                 await HeartbeatLoopAsync(connection, events.Reader, closed.Task, stoppingToken);
             }
             finally
             {
+                if (profiles is not null)
+                    profiles.Changed -= ReportProfiles;
+                if (inbox is not null)
+                    inbox.HelpRequested -= SendHelp;
                 if (updates is not null)
                     updates.StateChanged -= ReportUpdate;
                 await session.CancelAsync();

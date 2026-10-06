@@ -52,6 +52,11 @@ Source: "{#SourceDir}\MorniLAN.Launcher\*"; Excludes: "*.pdb"; DestDir: "{app}\L
 [Icons]
 Name: "{autoprograms}\MorniLAN"; Filename: "{app}\Launcher\MorniLAN.Launcher.exe"; Comment: "Status und Pairing-Code"
 
+[Registry]
+; Launcher bei jeder Anmeldung starten. In Administratorkonten beendet er sich mit --autostart sofort wieder,
+; dort bleibt der normale Desktop.
+Root: HKLM; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "MorniLAN Launcher"; ValueData: """{app}\Launcher\MorniLAN.Launcher.exe"" --autostart"; Flags: uninsdeletevalue
+
 [Run]
 Filename: "{app}\Launcher\MorniLAN.Launcher.exe"; Description: "MorniLAN öffnen (zeigt den Pairing-Code)"; Flags: postinstall nowait skipifsilent runasoriginaluser
 

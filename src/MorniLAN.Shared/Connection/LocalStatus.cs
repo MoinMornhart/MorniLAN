@@ -1,6 +1,7 @@
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using MorniLAN.Shared.Models;
 using MorniLAN.Shared.Serialization;
 
 namespace MorniLAN.Shared.Connection;
@@ -27,12 +28,21 @@ public sealed record AgentLocalStatus(
     string MachineName,
     string AgentVersion,
     DateTimeOffset Timestamp,
-    string? AppsHash = null);
+    string? AppsHash = null,
+    HelpState? Help = null);
+
+/// <summary>Stand der letzten Hilfe-Anfrage aus dem Launcher.</summary>
+/// <param name="Delivered">Beim Admin angekommen (sonst wartet sie, bis das Panel erreichbar ist).</param>
+public sealed record HelpState(string RequestId, DateTimeOffset RequestedAt, bool Delivered);
 
 /// <summary>Eine Kachel im Launcher.</summary>
 /// <param name="LaunchTarget">EXE-Pfad oder Link (steam://, com.epicgames.launcher://, shell:AppsFolder\…).</param>
 /// <param name="Icon">PNG 64×64.</param>
 /// <param name="Cover">JPEG bis 300×450, nur bei Spielen.</param>
+/// <param name="HiddenFor">
+/// Profile, für die der Eintrag gesperrt ist; <see cref="LauncherAppList.NoProfile"/> steht für „ohne Profil“
+/// (wenn es keine Profile gibt). Gezeigt werden Einträge, die für irgendwen frei sind.
+/// </param>
 public sealed record LauncherApp(
     string Id,
     string Name,
@@ -40,10 +50,22 @@ public sealed record LauncherApp(
     string? Arguments,
     bool IsGame,
     byte[]? Icon,
-    byte[]? Cover);
+    byte[]? Cover,
+    string[]? HiddenFor = null)
+{
+    public bool IsVisibleFor(string? profileId) =>
+        !(HiddenFor ?? []).Contains(profileId ?? LauncherAppList.NoProfile);
+}
 
-/// <summary>Alle freigegebenen Apps für den Launcher.</summary>
-public sealed record LauncherAppList(string Hash, LauncherApp[] Apps);
+/// <summary>Alle freigegebenen Apps für den Launcher, dazu die Profile des PCs.</summary>
+public sealed record LauncherAppList(
+    string Hash,
+    LauncherApp[] Apps,
+    LauncherProfile[]? Profiles = null,
+    bool ProfileCreationBlocked = false)
+{
+    public const string NoProfile = "*";
+}
 
 /// <summary>
 /// Freigegebene Apps samt Bildern über die Pipe <see cref="MorniLanConstants.LauncherAppsPipeName"/>,

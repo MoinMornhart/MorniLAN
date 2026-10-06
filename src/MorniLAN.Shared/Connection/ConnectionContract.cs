@@ -66,6 +66,12 @@ public interface IAdminHub
 
     /// <summary>Der Agent hat diesen Stand gespeichert und wendet ihn an.</summary>
     Task ReportPolicyApplied(long revision);
+
+    /// <summary>Profile auf dem PC (nach dem Verbinden und bei jeder Änderung). Der PC ist dafür die Quelle.</summary>
+    Task ReportProfiles(LauncherProfile[] profiles);
+
+    /// <summary>Jemand hat im Launcher „Hilfe anfordern“ gedrückt.</summary>
+    Task RequestHelp(HelpRequest request);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -88,6 +94,12 @@ public interface IAgentClient
 
     /// <summary>Der Admin hat Freigaben geändert.</summary>
     Task OnPolicyChanged(AppPolicy policy);
+
+    /// <summary>Der Admin legt ein Profil an.</summary>
+    Task OnCreateProfile(LauncherProfile profile);
+
+    /// <summary>Der Admin löscht ein Profil.</summary>
+    Task OnDeleteProfile(string profileId);
 }
 
 public enum HelloStatus

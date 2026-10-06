@@ -36,25 +36,67 @@ public sealed record CustomApp(string Id, string Name, string ExecutablePath, st
 /// standardmäßig alles frei, gesperrt wird gezielt.
 /// </param>
 /// <param name="Rules">Nur Abweichungen vom Standard.</param>
+/// <param name="ProfileRules">Abweichungen einzelner Profile von den Regeln des PCs (M5).</param>
+/// <param name="BlockProfileCreation">
+/// Am PC keine neuen Profile anlegen (sonst könnte man eine Sperre umgehen, indem man sich ein neues Profil macht).
+/// Absichtlich so herum benannt: Fehlt das Feld (ältere Daten), ist es false, das Anlegen also erlaubt.
+/// </param>
 public sealed record AppPolicy(
     long Revision,
     bool AllowByDefault,
     ApprovalRule[] Rules,
     CustomApp[] CustomApps,
-    DateTimeOffset UpdatedAt)
+    DateTimeOffset UpdatedAt,
+    ProfileRuleSet[]? ProfileRules = null,
+    bool BlockProfileCreation = false)
 {
     /// <summary>Stand, bevor der Admin etwas eingestellt hat.</summary>
     public static AppPolicy Default { get; } = new(0, true, [], [], DateTimeOffset.UnixEpoch);
 
-    public bool IsAllowed(string appId)
+    /// <summary>Regeln des PCs (ohne Profil).</summary>
+    public bool IsAllowed(string appId) => Find(Rules, appId) ?? AllowByDefault;
+
+    /// <summary>Für ein Profil: dessen Regel, sonst die des PCs, sonst der Standard.</summary>
+    public bool IsAllowed(string appId, string? profileId) =>
+        (profileId is null ? null : Find(RulesOf(profileId), appId)) ?? IsAllowed(appId);
+
+    /// <summary>Hat das Profil für diesen Eintrag eine eigene Regel?</summary>
+    public bool HasProfileRule(string appId, string profileId) => Find(RulesOf(profileId), appId) is not null;
+
+    private ApprovalRule[] RulesOf(string profileId) =>
+        (ProfileRules ?? []).FirstOrDefault(p => p.ProfileId == profileId)?.Rules ?? [];
+
+    private static bool? Find(ApprovalRule[] rules, string appId)
     {
-        foreach (var rule in Rules)
+        foreach (var rule in rules)
         {
             if (string.Equals(rule.AppId, appId, StringComparison.OrdinalIgnoreCase))
                 return rule.Approved;
         }
-        return AllowByDefault;
+        return null;
     }
+
+    /// <summary>
+    /// Für ein Profil freigeben oder sperren. Entspricht das der Regel des PCs, fällt die Profilregel weg
+    /// (das Profil folgt dann wieder dem PC).
+    /// </summary>
+    public AppPolicy WithAllowedForProfile(string profileId, IEnumerable<string> appIds, bool allowed, DateTimeOffset now)
+    {
+        var ids = appIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rules = RulesOf(profileId).Where(r => !ids.Contains(r.AppId)).ToList();
+        rules.AddRange(ids.Where(id => IsAllowed(id) != allowed).Select(id => new ApprovalRule(id, allowed, now)));
+        return Next(now) with { ProfileRules = WithProfile(profileId, [.. rules.OrderBy(r => r.AppId, StringComparer.OrdinalIgnoreCase)]) };
+    }
+
+    /// <summary>Alle eigenen Regeln eines Profils entfernen (z. B. wenn das Profil gelöscht wurde).</summary>
+    public AppPolicy WithoutProfile(string profileId, DateTimeOffset now) =>
+        Next(now) with { ProfileRules = WithProfile(profileId, []) };
+
+    public AppPolicy WithProfileCreationBlocked(bool blocked, DateTimeOffset now) =>
+        Next(now) with { BlockProfileCreation = blocked };
+
+    private ProfileRuleSet[] WithProfile(string profileId, ApprovalRule[] rules) =>
+        [.. (ProfileRules ?? []).Where(p => p.ProfileId != profileId), .. rules.Length > 0 ? [new ProfileRuleSet(profileId, rules)] : Array.Empty<ProfileRuleSet>()];
 
     /// <summary>Mehrere Einträge auf einmal freigeben oder sperren.</summary>
     public AppPolicy WithAllowed(IEnumerable<string> appIds, bool allowed, DateTimeOffset now)

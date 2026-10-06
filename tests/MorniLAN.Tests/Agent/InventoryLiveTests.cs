@@ -42,12 +42,19 @@ public class InventoryLiveTests
         var blockNames = (Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_BLOCK") ?? "").Split(';', StringSplitOptions.RemoveEmptyEntries);
         var blocked = report.Apps.Where(a => blockNames.Contains(a.Name, StringComparer.OrdinalIgnoreCase)).Select(a => a.Id).ToList();
         policy.Apply(MorniLAN.Shared.Models.AppPolicy.Default.WithAllowed(blocked, false, DateTimeOffset.UtcNow));
-        var catalog = new MorniLAN.Agent.Policy.LauncherCatalog(inventory, policy);
+        // Profile und Briefkasten (M5): Launcher dazu mit MORNILAN_INBOX=<MORNILAN_PREVIEW_USER>\AppData\Local\MorniLAN\launcher\inbox
+        var profiles = new MorniLAN.Agent.Policy.AgentProfileStore(dir.FullName);
+        var previewUser = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_USER")
+                          ?? Path.Combine(Path.GetTempPath(), "mornilan-preview-user");
+        var inbox = new MorniLAN.Agent.Policy.LauncherInboxService(profiles, policy,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Policy.LauncherInboxService>.Instance, () => [previewUser]);
+        await inbox.StartAsync(ct);
+        var catalog = new MorniLAN.Agent.Policy.LauncherCatalog(inventory, policy, profiles);
 
         var log = Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.LocalStatusServer>.Instance;
         using var status = new MorniLAN.Agent.Connection.LocalStatusServer(() => MorniLAN.Shared.Connection.LocalStatusPipe.Serialize(
             new MorniLAN.Shared.Connection.AgentLocalStatus(MorniLAN.Shared.Connection.AgentLinkState.Online, null, "Vorschau-Panel",
-                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash)), log, "MorniLAN.Preview",
+                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash, inbox.Help)), log, "MorniLAN.Preview",
             grantCurrentUser: true);
         using var apps = new MorniLAN.Agent.Connection.LocalStatusServer(
             () => MorniLAN.Shared.Connection.LauncherAppsPipe.Serialize(catalog.Current()), log, "MorniLAN.Preview.Apps",
@@ -60,7 +67,51 @@ public class InventoryLiveTests
         await Task.Delay(TimeSpan.FromSeconds(seconds), ct);
         await status.StopAsync(CancellationToken.None);
         await apps.StopAsync(CancellationToken.None);
+        await inbox.StopAsync(CancellationToken.None);
         try { dir.Delete(recursive: true); } catch (IOException) { }
+    }
+
+    /// <summary>
+    /// Ein Test-Agent (im Testprozess, eigener Datenordner) verbindet sich mit dem Panel auf diesem PC
+    /// (127.0.0.1:47950). Der Pairing-Code steht in MORNILAN_LIVE_DIR\code.txt; Hilfe-Anfragen und Profilwünsche
+    /// legt man in MORNILAN_LIVE_DIR\user\AppData\Local\MorniLAN\launcher\inbox ab. Läuft MORNILAN_PREVIEW_SECONDS.
+    /// </summary>
+    [Fact(Explicit = true)]
+    public async Task Live_AgentForLocalPanel()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var root = Environment.GetEnvironmentVariable("MORNILAN_LIVE_DIR") ?? throw new InvalidOperationException("MORNILAN_LIVE_DIR setzen");
+        var data = Path.Combine(root, "agent");
+        var user = Path.Combine(root, "user");
+        Directory.CreateDirectory(data);
+        Directory.CreateDirectory(MorniLAN.Shared.Models.LauncherInbox.FolderFor(user));
+        var policy = new MorniLAN.Agent.Policy.AgentPolicyStore(data);
+        var profiles = new MorniLAN.Agent.Policy.AgentProfileStore(data);
+        var inbox = new MorniLAN.Agent.Policy.LauncherInboxService(profiles, policy,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Policy.LauncherInboxService>.Instance, () => [user]);
+        var inventory = new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance, () => new InventoryCollector.Result(
+            [new InventoryItem(new MorniLAN.Shared.Models.AppEntry("steam:427520", "Factorio", MorniLAN.Shared.Models.AppSource.Steam,
+                SteamAppId: 427520), new ImageSources())], []), policy: policy);
+        var options = new MorniLAN.Agent.Connection.AgentConnectionOptions
+        {
+            DataDirectory = data, AdminHost = "127.0.0.1", AdminPort = 47950, EnableDiscovery = false,
+        };
+        var agent = new MorniLAN.Agent.Connection.AdminConnectionService(Microsoft.Extensions.Options.Options.Create(options),
+            new MorniLAN.Agent.Connection.AgentStateStore(data),
+            MorniLAN.Agent.Connection.AgentIdentity.LoadOrCreate(data, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance),
+            new MorniLAN.Agent.Platform.SystemStatusCollector(), Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.AdminConnectionService>.Instance,
+            inventory: inventory, policy: policy, profiles: profiles, inbox: inbox);
+        await inbox.StartAsync(ct);
+        await agent.StartAsync(ct);
+        var seconds = int.TryParse(Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_SECONDS"), out var s) ? s : 300;
+        var end = DateTime.UtcNow.AddSeconds(seconds);
+        while (DateTime.UtcNow < end)
+        {
+            await File.WriteAllTextAsync(Path.Combine(root, "code.txt"), $"{agent.State} {agent.PairingCode}", ct);
+            await Task.Delay(1000, ct);
+        }
+        await agent.StopAsync(CancellationToken.None);
+        await inbox.StopAsync(CancellationToken.None);
     }
 
     /// <summary>Fragt die Vorschau-Pipes wie der Launcher ab und zählt Aussetzer.</summary>

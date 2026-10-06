@@ -1,143 +1,241 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
-using Avalonia.Media;
 using Avalonia.Threading;
-using MorniLAN.Shared;
-using MorniLAN.Shared.Connection;
+using Avalonia.VisualTree;
+using MorniLAN.Launcher.Platform;
 
 namespace MorniLAN.Launcher;
 
+/// <summary>
+/// Vollbild über dem Desktop (Standardkonten) bzw. normales Fenster (Administratoren). Bedienung mit Maus,
+/// Pfeiltasten und Controller: Die Richtungen springen zur nächsten Kachel in dieser Richtung.
+/// </summary>
 public partial class MainWindow : Window
 {
-    private static readonly IBrush Online = new SolidColorBrush(Color.Parse("#3DDC84"));
-    private static readonly IBrush Waiting = new SolidColorBrush(Color.Parse("#4C8DFF"));
-    private static readonly IBrush Offline = new SolidColorBrush(Color.Parse("#5C6575"));
-    private static readonly IBrush Problem = new SolidColorBrush(Color.Parse("#FF6B6B"));
+    private readonly LauncherViewModel _viewModel = new();
+    private readonly bool _fullscreen;
+    private readonly Gamepad _gamepad = new();
+    private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(2) };
+    private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
+    private readonly DispatcherTimer _systemTimer = new() { Interval = TimeSpan.FromSeconds(10) };
+    private readonly DispatcherTimer _padTimer = new() { Interval = TimeSpan.FromMilliseconds(16) };
 
-    /// <summary>Zum Testen gegen einen eigenen Agent (sonst die Pipes des Dienstes).</summary>
-    private static readonly string StatusPipe =
-        Environment.GetEnvironmentVariable("MORNILAN_PIPE") ?? MorniLanConstants.LauncherPipeName;
-    private static readonly string AppsPipe =
-        Environment.GetEnvironmentVariable("MORNILAN_APPS_PIPE") ?? MorniLanConstants.LauncherAppsPipeName;
+    public MainWindow() : this(fullscreen: false) { }
 
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromSeconds(2) };
-    private bool _querying;
-    private string? _appsHash;
-    private int _tileCount;
-    private string? _launchMessage;
-    private DateTimeOffset _launchMessageUntil;
-
-    public MainWindow()
+    public MainWindow(bool fullscreen)
     {
+        _fullscreen = fullscreen;
         InitializeComponent();
-        VersionText.Text = $"MorniLAN Launcher {VersionInfo.Display}";
-        _timer.Tick += async (_, _) => await RefreshAsync();
+        DataContext = _viewModel;
+        if (fullscreen)
+        {
+            WindowState = WindowState.FullScreen;
+            CanResize = false;
+        }
+
+        _viewModel.FocusRequested += () => Dispatcher.UIThread.Post(FocusDefault, DispatcherPriority.Background);
+        _refreshTimer.Tick += async (_, _) => await _viewModel.RefreshAsync();
+        _clockTimer.Tick += (_, _) => _viewModel.UpdateClock();
+        _systemTimer.Tick += async (_, _) => await _viewModel.UpdateSystemAsync();
+        _padTimer.Tick += (_, _) => PollGamepad();
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+
         Opened += async (_, _) =>
         {
-            _timer.Start();
-            await RefreshAsync();
+            _refreshTimer.Start();
+            _clockTimer.Start();
+            _systemTimer.Start();
+            _padTimer.Start();
+            await _viewModel.UpdateSystemAsync();
+            await _viewModel.RefreshAsync();
+            FocusDefault();
         };
-        Closed += (_, _) => _timer.Stop();
+        Closing += OnClosing;
+        Closed += (_, _) =>
+        {
+            _refreshTimer.Stop();
+            _clockTimer.Stop();
+            _systemTimer.Stop();
+            _padTimer.Stop();
+        };
     }
 
-    private async Task RefreshAsync()
+    /// <summary>Im Vollbild lässt sich der Launcher nicht per Alt+F4 schließen, nur Windows selbst beendet ihn.</summary>
+    private void OnClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (_querying)
-            return;
-        _querying = true;
-        try
+        if (_fullscreen && e.CloseReason is not (WindowCloseReason.OSShutdown or WindowCloseReason.ApplicationShutdown))
+            e.Cancel = true;
+    }
+
+    // ───── Tastatur und Controller ─────
+
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs e)
+    {
+        var focused = FocusManager?.GetFocusedElement();
+        switch (e.Key)
         {
-            var status = await Task.Run(() => LocalStatusPipe.QueryAsync(TimeSpan.FromSeconds(1.5), pipeName: StatusPipe));
-            // Neue Kacheln nur holen, wenn sich die Freigaben geändert haben (Bilder sind groß)
-            if (status?.AppsHash is { } hash && hash != _appsHash)
+            case Key.Escape:
+                _viewModel.BackCommand.Execute(null);
+                e.Handled = true;
+                break;
+            case Key.Up or Key.Down:
+                e.Handled = Move(e.Key == Key.Up ? NavigationDirection.Up : NavigationDirection.Down);
+                break;
+            case Key.Left or Key.Right when focused is not (TextBox or Slider):
+                e.Handled = Move(e.Key == Key.Left ? NavigationDirection.Left : NavigationDirection.Right);
+                break;
+            case Key.Enter when focused is TextBox && _viewModel.ShowNewProfile:
+                _viewModel.CreateProfileCommand.Execute(null);
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private void PollGamepad()
+    {
+        // Nur, wenn der Launcher vorne ist: Während eines Spiels gehören die Eingaben dem Spiel
+        if (!IsActive)
+        {
+            foreach (var _ in _gamepad.Poll()) { } // Zustand mitführen, damit nach dem Spiel nichts nachfeuert
+            return;
+        }
+        foreach (var action in _gamepad.Poll())
+        {
+            switch (action)
             {
-                var list = await Task.Run(() => LauncherAppsPipe.QueryAsync(TimeSpan.FromSeconds(10), pipeName: AppsPipe));
-                if (list is not null)
-                {
-                    ShowTiles(list);
-                    _appsHash = hash;
-                }
+                case PadAction.Up: Move(NavigationDirection.Up); break;
+                case PadAction.Down: Move(NavigationDirection.Down); break;
+                case PadAction.Left: Move(NavigationDirection.Left); break;
+                case PadAction.Right: Move(NavigationDirection.Right); break;
+                case PadAction.Accept: PressFocused(); break;
+                case PadAction.Back: _viewModel.BackCommand.Execute(null); break;
+                case PadAction.Search when _viewModel.IsHome && !_viewModel.HasOverlay: SearchBox.Focus(NavigationMethod.Directional); break;
+                case PadAction.Menu when !_viewModel.HasOverlay: _viewModel.OpenPowerCommand.Execute(null); break;
             }
-            Show(status);
-        }
-        finally
-        {
-            _querying = false;
         }
     }
 
-    private void ShowTiles(LauncherAppList list)
+    private void PressFocused()
     {
-        var tiles = list.Apps.Select(a => new LauncherTile(a)).ToList();
-        GamesList.ItemsSource = tiles.Where(t => t.App.IsGame).ToList();
-        AppsList.ItemsSource = tiles.Where(t => !t.App.IsGame).ToList();
-        GamesSection.IsVisible = tiles.Any(t => t.App.IsGame);
-        AppsSection.IsVisible = tiles.Any(t => !t.App.IsGame);
-        _tileCount = tiles.Count;
+        if (FocusManager?.GetFocusedElement() is Button { Command: { } command } button && command.CanExecute(button.CommandParameter))
+            command.Execute(button.CommandParameter);
     }
 
-    private void Show(AgentLocalStatus? status)
+    private Control? _lastContentFocus;
+
+    /// <summary>
+    /// Wie bei Konsolen: hoch/runter zur nächsten Reihe und dort zur waagerecht nächsten Fläche, links/rechts nur
+    /// innerhalb der Reihe. Inhalt und Leiste sind getrennt: in die Leiste erst, wenn darunter nichts mehr kommt;
+    /// aus der Leiste nach oben zurück zur zuletzt gewählten Kachel.
+    /// </summary>
+    private bool Move(NavigationDirection direction)
     {
-        if (status is null)
+        var current = FocusManager?.GetFocusedElement() as Control;
+        var inBar = current is not null && !_viewModel.HasOverlay && IsInside(current, Bar);
+        var area = _viewModel.HasOverlay ? Targets(Overlay) : inBar ? Targets(Bar) : Targets(ContentArea);
+        if (current is null || !area.Contains(current))
         {
-            StatusDot.Fill = Problem;
-            StatusText.Text = "Der MorniLAN-Dienst läuft nicht. Bitte den Admin fragen.";
-            PairingCard.IsVisible = false;
-            ShowWelcome("Launcher – deine freigegebenen Apps und Spiele erscheinen hier.");
+            var start = _lastContentFocus is { } last && Targets(ContentArea).Contains(last) ? last : Targets(ContentArea).FirstOrDefault();
+            if (start is not null)
+                Focus(start);
+            return start is not null;
+        }
+
+        var next = Nearest(current, area, direction);
+        if (next is null && !_viewModel.HasOverlay)
+        {
+            if (!inBar && direction == NavigationDirection.Down)
+                next = Targets(Bar).FirstOrDefault();
+            else if (inBar && direction == NavigationDirection.Up)
+                next = _lastContentFocus is { } last && Targets(ContentArea).Contains(last) ? last : Nearest(current, Targets(ContentArea), direction);
+        }
+        if (next is not null)
+        {
+            if (!inBar || !IsInside(next, Bar))
+                _lastContentFocus = IsInside(next, Bar) ? current : next;
+            Focus(next);
+        }
+        return true; // am Rand stehen bleiben, nicht aus dem Fenster springen
+    }
+
+    private Control? Nearest(Control current, List<Control> area, NavigationDirection direction)
+    {
+        var from = Rect(current);
+        var vertical = direction is NavigationDirection.Up or NavigationDirection.Down;
+        var candidates = area.Where(c => c != current).Select(c => (Control: c, Rect: Rect(c))).Where(x => direction switch
+        {
+            NavigationDirection.Up => x.Rect.Bottom <= from.Top + 4,
+            NavigationDirection.Down => x.Rect.Top >= from.Bottom - 4,
+            // Gleiche Reihe: senkrechte Mitte innerhalb der Fläche
+            NavigationDirection.Left => x.Rect.Right <= from.Left + 4 && Math.Abs(x.Rect.Center.Y - from.Center.Y) < from.Height / 2 + 20,
+            _ => x.Rect.Left >= from.Right - 4 && Math.Abs(x.Rect.Center.Y - from.Center.Y) < from.Height / 2 + 20,
+        }).ToList();
+        if (candidates.Count == 0)
+            return null;
+        if (!vertical)
+            return candidates.MinBy(x => Math.Abs(x.Rect.Center.X - from.Center.X)).Control;
+        // Nächste Reihe finden, dann darin die waagerecht nächste Fläche
+        double Gap((Control Control, Rect Rect) x) =>
+            direction == NavigationDirection.Down ? x.Rect.Top - from.Bottom : from.Top - x.Rect.Bottom;
+        var rowGap = candidates.Min(Gap);
+        return candidates.Where(x => Gap(x) <= rowGap + 24).MinBy(x => Math.Abs(x.Rect.Center.X - from.Center.X)).Control;
+    }
+
+    /// <summary>Bedienbare Flächen in einem Bereich (Inhalt, Leiste oder offener Dialog).</summary>
+    private static List<Control> Targets(Visual root) =>
+        [.. root.GetVisualDescendants().OfType<Control>()
+            .Where(c => c is Button or TextBox or Slider && c.Focusable && c.IsEffectivelyVisible && c.IsEffectivelyEnabled
+                        && c.Bounds.Width > 0)];
+
+    /// <summary>Alle bedienbaren Flächen der aktuellen Ansicht (für den Startfokus).</summary>
+    private IEnumerable<Control> Targets() => Targets(_viewModel.HasOverlay ? Overlay : this);
+
+    private static bool IsInside(Control control, Visual area) => control == area || control.GetVisualAncestors().Contains(area);
+
+    private Rect Rect(Control control) =>
+        control.TranslatePoint(default, this) is { } topLeft ? new Rect(topLeft, control.Bounds.Size) : default;
+
+    private static void Focus(Control control)
+    {
+        control.Focus(NavigationMethod.Directional);
+        control.BringIntoView();
+    }
+
+    /// <summary>Sinnvoller Startpunkt je Ansicht: Dialogfeld, zuletzt gewähltes Profil oder erste Kachel.</summary>
+    private void FocusDefault()
+    {
+        if (_viewModel.ShowNewProfile)
+        {
+            NewProfileNameBox.Focus(NavigationMethod.Directional);
             return;
         }
-
-        var admin = string.IsNullOrEmpty(status.AdminName) ? "dem Admin-PC" : $"„{status.AdminName}“";
-        var waitingForPairing = status.State == AgentLinkState.WaitingForPairing && status.PairingCode is not null;
-        switch (status.State)
+        if (_viewModel.ShowPower)
         {
-            case AgentLinkState.Online:
-                StatusDot.Fill = Online;
-                StatusText.Text = $"Verbunden mit {admin}";
-                break;
-            case AgentLinkState.WaitingForPairing when status.PairingCode is { } code:
-                StatusDot.Fill = Waiting;
-                StatusText.Text = $"Wartet auf Kopplung mit {admin}";
-                PairingHint.Text = $"Gib diesen Code im Admin-Panel auf {admin} ein:";
-                PairingCode.Text = code;
-                break;
-            default:
-                // Gekoppelt, aber das Panel ist gerade aus: Die Kacheln gelten trotzdem (lokal gespeichert)
-                StatusDot.Fill = Offline;
-                StatusText.Text = "Suche das Admin-Panel im Netzwerk …";
-                break;
-        }
-        if (_launchMessage is not null && DateTimeOffset.UtcNow < _launchMessageUntil)
-            StatusText.Text = _launchMessage;
-
-        PairingCard.IsVisible = waitingForPairing;
-        if (waitingForPairing)
-            ShowWelcome("Launcher – deine freigegebenen Apps und Spiele erscheinen hier.");
-        else if (_tileCount == 0)
-            ShowWelcome(status.AppsHash is null
-                ? "Launcher – deine freigegebenen Apps und Spiele erscheinen hier."
-                : "Noch nichts freigegeben. Der Admin kann im Panel festlegen, was hier erscheint.");
-        else
-        {
-            WelcomeView.IsVisible = false;
-            TilesView.IsVisible = true;
-        }
-    }
-
-    private void ShowWelcome(string text)
-    {
-        Subtitle.Text = text;
-        WelcomeView.IsVisible = true;
-        TilesView.IsVisible = false;
-    }
-
-    private void OnTileClick(object? sender, RoutedEventArgs e)
-    {
-        if ((sender as Control)?.DataContext is not LauncherTile tile)
+            // Nicht „Herunterfahren“ vorauswählen: ein versehentliches A am Controller wäre sonst das Ende
+            PowerDialog.GetVisualDescendants().OfType<Button>().LastOrDefault()?.Focus(NavigationMethod.Directional);
             return;
-        var error = AppStarter.Start(tile.App.LaunchTarget, tile.App.Arguments);
-        _launchMessage = error is null ? $"{tile.Name} wird gestartet …" : $"{tile.Name} ließ sich nicht starten: {error}";
-        _launchMessageUntil = DateTimeOffset.UtcNow.AddSeconds(error is null ? 6 : 12);
-        StatusText.Text = _launchMessage;
+        }
+        if (_viewModel.HasOverlay)
+        {
+            Targets().FirstOrDefault()?.Focus(NavigationMethod.Directional);
+            return;
+        }
+        if (_viewModel.IsProfiles)
+        {
+            var buttons = ProfilesView.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).ToList();
+            var last = _viewModel.LastProfile;
+            (buttons.FirstOrDefault(b => last is not null && b.DataContext == last) ?? buttons.FirstOrDefault())?
+                .Focus(NavigationMethod.Directional);
+            return;
+        }
+        if (_viewModel.IsHome)
+        {
+            var first = HomeView.GetVisualDescendants().OfType<Button>()
+                .FirstOrDefault(b => b.Classes.Contains("tile") && b.IsEffectivelyVisible);
+            if (first is not null)
+                Focus(first);
+        }
     }
 }
