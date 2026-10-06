@@ -37,7 +37,7 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
   - **EA app** und **Battle.net** in der Windows-Programmliste am Deinstallationsprogramm des Launchers (`EAInstaller\…\Cleanup.exe`, `Blizzard Uninstaller.exe`), Start über EXE bzw. Verknüpfung.
   - DLC, Engines und halb installierte Spiele werden ausgelassen. Programmeinträge und Verknüpfungen im Spielordner werden nicht doppelt gezeigt.
 - **Cover:** lokal (Steam-Cache), sonst einmalig aus dem Steam-Shop (Namenssuche, nur exakte Treffer oder anderer Editionszusatz). Dabei geht nur der Spielname an Steam, keine Daten über PC oder Nutzer. Ergebnisse liegen im Datenordner (`covers`), erfolglose Suchen werden 7 Tage nicht wiederholt.
-- Führt Admin-Befehle aus: Programm installieren (z. B. per winget), Neustart, Nachricht an den Benutzer, Sperre jetzt aktivieren.
+- Führt Admin-Befehle aus (M8, entschieden 2026-10-06): Programm **installieren/deinstallieren** per winget (`--silent`), außerdem **aus einer https-Adresse** (.exe/.msi) herunterladen und still installieren (Nutzer-Wunsch: „ich schicke die App, MorniLAN kümmert sich ums Runterladen“); **Nachricht** im Launcher anzeigen; **Neustart/Herunterfahren** mit Vorwarnung; „Sperre jetzt aktivieren“. Ergebnis geht ans Panel (Verlauf). winget-Suche läuft im Panel (gleiche Paketquelle wie der PC).
 - Lokales Logging (Serilog) mit Log-Rotation.
 
 ### 2. MorniLAN.Launcher (Oberfläche für den Freund)

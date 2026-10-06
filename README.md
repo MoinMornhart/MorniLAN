@@ -96,6 +96,7 @@ Ausführliche Anleitung mit Fehlersuche: [docs/einrichtung.md](docs/einrichtung.
 | 🔒 | **Windows-Sperren:** je Konto wählen, ob es eingeschränkt wird (Admin-Konten nie); Einstellungen, Konsole, Registry, Task-Manager und Installieren sperrbar, mit Notfall-Entsperrung am PC | ✅ in der Beta |
 | 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen (Sunshine + Moonlight). Immer sichtbar am PC, mit Erlauben/Ablehnen und Maus/Tastatur-Sperre | ✅ Steuerung in der Beta |
 | 🙋 | **Hilfe anfordern:** ein Knopf im Launcher, du bekommst sofort einen Hinweis im Panel | ✅ in der Beta |
+| 🛠️ | **Aktionen:** Programme per winget installieren/deinstallieren oder aus einer Adresse, Nachricht schicken, Neustart/Herunterfahren | ✅ in der Beta |
 
 ### Updates
 
@@ -127,7 +128,7 @@ dem Start über seine Prüfsumme (SHA-256) geprüft.
 - [x] 5. Launcher im Vollbild mit Profilen, Controller und Hilfe-Knopf
 - [x] 6. Windows-Sperren je Konto und Notfall-Entsperrung (App Control folgt mit Prüfmodus)
 - [x] 7. Fernzugriff: Steuerung, Anzeige am PC, Eingabesperre (Streaming-Test zu zweit steht aus)
-- [ ] 8. Aktionen (winget, Nachrichten, Neustart, Hilfe anfordern)
+- [x] 8. Aktionen: Programme installieren/deinstallieren, Nachricht, Neustart/Herunterfahren
 - [ ] 9. Updates mit Rückfall auf die alte Version
 - [ ] 10. Einrichtungsassistent: PC einschalten, Profil wählen, los
 - [ ] 11. Feinschliff und Admin-Doku

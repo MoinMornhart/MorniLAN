@@ -31,7 +31,8 @@ internal sealed class AdminConnectionService(
     Policy.AgentProfileStore? profiles = null,
     Policy.LauncherInboxService? inbox = null,
     Restrictions.RestrictionService? restrictions = null,
-    Remote.RemoteAccessService? remote = null) : BackgroundService
+    Remote.RemoteAccessService? remote = null,
+    Actions.ActionService? actions = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -58,7 +59,7 @@ internal sealed class AdminConnectionService(
                 ? Shared.Connection.PairingCode.Format(code)
                 : null,
             AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow, catalog?.Current().Hash,
-            inbox?.Help, remote?.State);
+            inbox?.Help, remote?.State, actions?.CurrentMessage);
 
     public event Action<AgentLinkState>? StateChanged;
 
@@ -153,6 +154,28 @@ internal sealed class AdminConnectionService(
         connection.On<bool>(nameof(IAgentClient.OnStartRemote), allow => remote?.Start(allow));
         connection.On(nameof(IAgentClient.OnStopRemote), () => remote?.Stop());
         connection.On<bool>(nameof(IAgentClient.OnSetInputLock), locked => remote?.SetInputLock(locked));
+        connection.On<AdminCommand>(nameof(IAgentClient.OnRunCommand), async command =>
+        {
+            CommandResult result;
+            if (command is LockNowCommand)
+            {
+                restrictions?.ApplyNow();
+                result = new CommandResult(command.CommandId, true, command.Describe());
+            }
+            else if (actions is not null)
+            {
+                result = await actions.RunAsync(command, stoppingToken);
+            }
+            else
+            {
+                return;
+            }
+            try { await connection.InvokeAsync(nameof(IAdminHub.ReportCommandResult), result, stoppingToken); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogDebug("Befehlsergebnis nicht gemeldet: {Error}", ex.Message);
+            }
+        });
         connection.On<AppPolicy>(nameof(IAgentClient.OnPolicyChanged), async received =>
         {
             try { await ApplyPolicyAsync(connection, received, authoritative: false, refreshRequested, stoppingToken); }

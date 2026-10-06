@@ -66,6 +66,7 @@ public sealed class AdminServer : IAsyncDisposable
     public DeviceProfileStore Profiles { get; }
     public DeviceAccountStore Accounts { get; }
     public RemoteAccessStore Remote { get; }
+    public ActionLog Actions { get; } = new();
     public HelpInbox Help { get; } = new();
 
     public AdminIdentity Identity { get; }
@@ -104,6 +105,7 @@ public sealed class AdminServer : IAsyncDisposable
         builder.Services.AddSingleton(Profiles);
         builder.Services.AddSingleton(Accounts);
         builder.Services.AddSingleton(Remote);
+        builder.Services.AddSingleton(Actions);
         builder.Services.AddSingleton(Help);
         builder.Services.AddSingleton(_options.Time);
         builder.Services.AddSignalR(o =>
@@ -187,6 +189,17 @@ public sealed class AdminServer : IAsyncDisposable
         var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
         await hub.Clients.Client(connectionId).OnCreateProfile(
             new LauncherProfile(LauncherProfile.NewId(), name.Trim(), ProfileColors.Normalize(color), DateTimeOffset.UtcNow));
+        return true;
+    }
+
+    /// <summary>Einen Admin-Befehl an den PC schicken (installieren, Nachricht, Neustart …). Nur wenn er online ist.</summary>
+    public async Task<bool> RunCommandAsync(Guid deviceId, Shared.Models.AdminCommand command)
+    {
+        if (Registry.ConnectionIdOf(deviceId) is not { } connectionId || _app is null)
+            return false;
+        Actions.Started(deviceId, command);
+        var hub = _app.Services.GetRequiredService<IHubContext<AgentHub, IAgentClient>>();
+        await hub.Clients.Client(connectionId).OnRunCommand(command);
         return true;
     }
 

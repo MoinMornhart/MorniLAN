@@ -18,6 +18,7 @@ internal sealed class AgentHub(
     DeviceProfileStore profiles,
     DeviceAccountStore accounts,
     RemoteAccessStore remote,
+    ActionLog actions,
     HelpInbox help,
     TimeProvider time,
     ILogger<AgentHub> logger) : Hub<IAgentClient>, IAdminHub
@@ -171,6 +172,13 @@ internal sealed class AgentHub(
         var deviceId = RequirePairedDevice();
         var message = state.Message.Length <= 300 ? state.Message : state.Message[..300];
         remote.Save(deviceId, state with { Message = message });
+        return Task.CompletedTask;
+    }
+
+    public Task ReportCommandResult(CommandResult result)
+    {
+        var deviceId = RequirePairedDevice();
+        actions.Record(deviceId, result);
         return Task.CompletedTask;
     }
 

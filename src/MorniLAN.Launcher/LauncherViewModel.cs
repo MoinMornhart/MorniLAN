@@ -160,6 +160,12 @@ public sealed partial class LauncherViewModel : ObservableObject
     [ObservableProperty] public partial string RemoteBanner { get; set; } = "";
     public bool ShowRemoteBanner => RemoteActive || RemoteAsking;
 
+    // Nachricht des Admins
+    [ObservableProperty] public partial bool ShowMessage { get; set; }
+    [ObservableProperty] public partial string MessageTitle { get; set; } = "";
+    [ObservableProperty] public partial string MessageText { get; set; } = "";
+    private Guid _dismissedMessage;
+
     /// <summary>Die Eingabesperre (vom Fenster gesetzt), damit Maus/Tastatur wirklich blockiert werden.</summary>
     public Action<bool>? SetInputLock { get; set; }
 
@@ -344,6 +350,14 @@ public sealed partial class LauncherViewModel : ObservableObject
 
         ShowRemote(status.Remote ?? RemoteSessionState.Idle);
 
+        // Admin-Nachricht anzeigen, bis sie weggeklickt wird
+        if (status.Message is { } message && message.Id != _dismissedMessage)
+        {
+            MessageTitle = string.IsNullOrEmpty(message.Title) ? "Nachricht vom Admin" : message.Title;
+            MessageText = message.Text;
+            ShowMessage = true;
+        }
+
         // Während der Passwortabfrage den Bildschirm nicht wegziehen
         if (View == LauncherView.Password)
             return;
@@ -384,6 +398,14 @@ public sealed partial class LauncherViewModel : ObservableObject
             InputLocked = remote.InputLocked;
             SetInputLock?.Invoke(remote.InputLocked && remote.Phase == RemoteSessionPhase.Active);
         }
+    }
+
+    [RelayCommand]
+    private void DismissMessage()
+    {
+        ShowMessage = false;
+        if (_status?.Message is { } message)
+            _dismissedMessage = message.Id;
     }
 
     [RelayCommand]

@@ -81,6 +81,9 @@ public interface IAdminHub
 
     /// <summary>Stand des Fernzugriffs (angefragt, läuft, abgelehnt …), für die Anzeige im Panel.</summary>
     Task ReportRemoteState(RemoteSessionState state);
+
+    /// <summary>Ergebnis eines Admin-Befehls (Installation, Deinstallation, …).</summary>
+    Task ReportCommandResult(CommandResult result);
 }
 
 /// <summary>Methoden, die das Admin-Panel beim Agent aufruft.</summary>
@@ -124,6 +127,9 @@ public interface IAgentClient
 
     /// <summary>Maus und Tastatur des Freundes während der Sitzung sperren oder freigeben.</summary>
     Task OnSetInputLock(bool locked);
+
+    /// <summary>Der Admin schickt einen Befehl (installieren, Nachricht, Neustart …).</summary>
+    Task OnRunCommand(AdminCommand command);
 }
 
 public enum HelloStatus

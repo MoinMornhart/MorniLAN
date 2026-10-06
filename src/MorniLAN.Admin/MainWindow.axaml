@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:MorniLAN.Admin.ViewModels"
+        xmlns:platform="using:MorniLAN.Admin.Platform"
         x:Class="MorniLAN.Admin.MainWindow"
         x:DataType="vm:MainViewModel"
         Title="MorniLAN Admin"
@@ -522,6 +523,97 @@
                             OnContent="Ohne Rückfrage erlauben (startet sofort)" OffContent="Immer am PC nachfragen" />
               <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap"
                          Text="Ist das Häkchen aus, erscheint am PC des Freundes eine Abfrage „Erlauben/Ablehnen“. Mit Häkchen startet der Fernzugriff sofort – am PC bleibt der deutliche Hinweis trotzdem sichtbar." />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <!-- Aktionen -->
+        <StackPanel Spacing="16" IsVisible="{Binding IsActions}">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Aktionen" FontSize="28" FontWeight="SemiBold" />
+            <ComboBox Grid.Column="1" ItemsSource="{Binding Actions.Devices}" SelectedItem="{Binding Actions.SelectedDevice}"
+                      MinWidth="160" PlaceholderText="PC wählen" />
+          </Grid>
+          <TextBlock Text="{Binding Actions.OfflineHint}" Classes="muted" IsVisible="{Binding !Actions.IsOnline}" TextWrapping="Wrap" />
+          <TextBlock Text="{Binding Actions.ActionError}" Foreground="#FF6B6B" IsVisible="{Binding Actions.HasDevice}" />
+
+          <Border Classes="card" IsVisible="{Binding Actions.HasDevice}">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Programm installieren" Classes="h2" />
+              <TextBox Text="{Binding Actions.SearchText}" PlaceholderText="Programm suchen (z. B. Discord) …" />
+              <TextBlock Text="Suche läuft …" Classes="muted" IsVisible="{Binding Actions.Searching}" />
+              <ItemsControl ItemsSource="{Binding Actions.SearchResults}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="platform:WingetHit">
+                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4">
+                      <StackPanel VerticalAlignment="Center">
+                        <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                        <TextBlock Text="{Binding Id}" Classes="label" />
+                      </StackPanel>
+                      <Button Grid.Column="1" Content="Installieren" Classes="accent" Margin="0,0,8,0"
+                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Actions.InstallCommand}"
+                              CommandParameter="{Binding}" />
+                      <Button Grid.Column="2" Content="Deinstallieren"
+                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Actions.UninstallCommand}"
+                              CommandParameter="{Binding}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" IsVisible="{Binding Actions.HasDevice}">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Von einer Adresse installieren" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Direkter Link auf eine .exe oder .msi. MorniLAN lädt sie auf den PC und installiert sie still. Nur Quellen nutzen, denen du vertraust." />
+              <Grid ColumnDefinitions="2*,*,Auto" ColumnSpacing="10">
+                <TextBox Text="{Binding Actions.UrlAddress}" PlaceholderText="https://…/setup.exe" />
+                <TextBox Grid.Column="1" Text="{Binding Actions.UrlName}" PlaceholderText="Name" />
+                <Button Grid.Column="2" Content="Installieren" Command="{Binding Actions.InstallFromUrlCommand}" />
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" IsVisible="{Binding Actions.HasDevice}">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Nachricht an den Freund" Classes="h2" />
+              <TextBox Text="{Binding Actions.MessageTitle}" PlaceholderText="Titel (optional)" />
+              <TextBox Text="{Binding Actions.MessageText}" PlaceholderText="Nachricht …" AcceptsReturn="True" MinHeight="60" TextWrapping="Wrap" />
+              <Button Content="Senden" HorizontalAlignment="Left" Command="{Binding Actions.SendMessageCommand}" />
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" IsVisible="{Binding Actions.HasDevice}">
+            <StackPanel Spacing="10">
+              <TextBlock Text="PC steuern" Classes="h2" />
+              <TextBlock Classes="muted" Text="Der PC zeigt vorher eine Minute lang eine Warnung an." />
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Neu starten" Command="{Binding Actions.RestartCommand}" />
+                <Button Content="Herunterfahren" Command="{Binding Actions.ShutDownCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="card" IsVisible="{Binding Actions.HasDevice}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="Verlauf" Classes="h2" />
+              <TextBlock Text="Noch keine Aktionen." Classes="muted" IsVisible="{Binding !Actions.History.Count}" />
+              <ItemsControl ItemsSource="{Binding Actions.History}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="vm:ActionEntryViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,4">
+                      <Ellipse Width="9" Height="9" Fill="{Binding StateBrush}" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="1" Margin="10,0" Text="{Binding Description}" VerticalAlignment="Center" TextWrapping="Wrap" />
+                      <StackPanel Grid.Column="2" HorizontalAlignment="Right">
+                        <TextBlock Text="{Binding StateText}" HorizontalAlignment="Right" />
+                        <TextBlock Text="{Binding Time}" Classes="label" HorizontalAlignment="Right" />
+                      </StackPanel>
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
             </StackPanel>
           </Border>
         </StackPanel>

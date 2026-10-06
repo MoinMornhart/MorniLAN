@@ -456,16 +456,44 @@ public sealed class AgentAdminConnectionTests : IDisposable
         await StopAsync(agent);
     }
 
+    /// <summary>M8 über TLS: Panel schickt einen Befehl (Nachricht), Agent führt ihn aus und meldet das Ergebnis.</summary>
+    [Fact]
+    public async Task Command_RunsOnAgent_AndResultReachesPanel()
+    {
+        await using var admin = await StartAdminAsync(_adminDir.Path);
+        var messages = new List<MorniLAN.Shared.Models.AdminMessage>();
+        var actions = new MorniLAN.Agent.Actions.ActionService(NullLogger<MorniLAN.Agent.Actions.ActionService>.Instance,
+            runProcess: (_, _, _) => (0, ""), showMessage: messages.Add);
+        var options = new AgentConnectionOptions
+        {
+            DataDirectory = _agentDir.Path, AdminHost = "127.0.0.1", AdminPort = admin.Port,
+            EnableDiscovery = false, HeartbeatInterval = TimeSpan.FromMilliseconds(300),
+        };
+        var agent = await StartAgentAsync(options, actions: actions);
+        await WaitUntil(() => admin.Pairing.Snapshot().Count == 1 && agent.PairingCode is not null, "Pairing-Anfrage");
+        await admin.Pairing.SubmitCodeAsync(admin.Pairing.Snapshot()[0].RequestId, agent.PairingCode!);
+        var deviceId = new AgentStateStore(_agentDir.Path).Current.DeviceId;
+        await WaitUntil(() => agent.State == AgentLinkState.Online, "online");
+
+        var command = new MorniLAN.Shared.Models.ShowMessageCommand("Essen", "Gleich Abendessen");
+        Assert.True(await admin.RunCommandAsync(deviceId, command));
+        await WaitUntil(() => admin.Actions.For(deviceId).Any(e => e.CommandId == command.CommandId && e.Success == true),
+            "Ergebnis im Panel");
+        Assert.Equal("Gleich Abendessen", Assert.Single(messages).Text);
+
+        await StopAsync(agent);
+    }
+
     private static async Task<AdminConnectionService> StartAgentAsync(AgentConnectionOptions options,
         DiscoveryListener? discovery = null, InventoryService? inventory = null,
         MorniLAN.Agent.Policy.AgentPolicyStore? policy = null, MorniLAN.Agent.Policy.AgentProfileStore? profiles = null,
         MorniLAN.Agent.Policy.LauncherInboxService? inbox = null, MorniLAN.Agent.Restrictions.RestrictionService? restrictions = null,
-        MorniLAN.Agent.Remote.RemoteAccessService? remote = null)
+        MorniLAN.Agent.Remote.RemoteAccessService? remote = null, MorniLAN.Agent.Actions.ActionService? actions = null)
     {
         var identity = AgentIdentity.LoadOrCreate(options.DataDirectory, NullLogger.Instance);
         var service = new AdminConnectionService(Options.Create(options), new AgentStateStore(options.DataDirectory),
             identity, new SystemStatusCollector(), NullLogger<AdminConnectionService>.Instance, discovery, inventory,
-            policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions, remote: remote);
+            policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions, remote: remote, actions: actions);
         await service.StartAsync(Ct);
         return service;
     }
