@@ -10,6 +10,8 @@ Ab Meilenstein 9 wird dieser Changelog automatisch aus den Conventional Commits 
 - Admin-Panel: Seite „Freigaben“ mit Spiele-Covern, Programmliste, Suche, Filter, „Systemkomponenten anzeigen“ und „Neu einlesen“.
 - Die Liste wird nach dem Verbinden, alle 15 Minuten bei Änderungen und auf Wunsch übertragen; Bilder nur einmal, vom Panel geprüft.
 - Automatische Updates über GitHub-Releases (aus M9 vorgezogen): Admin-Panel mit „Update verfügbar → Jetzt aktualisieren“, Geräte aktualisieren sich selbst (nie während eines Steam-Spiels) oder per Knopf im Panel. Setup-Prüfsumme (SHA-256) ist Pflicht. Betas werden mit angeboten.
+- Weitere Launcher (M3.2): Spiele aus Epic Games, GOG, Ubisoft Connect, EA app und Battle.net werden erkannt, ohne Dubletten und ohne DLC, mit passendem Startweg (Launcher-Link oder EXE). Im Panel erscheinen sie bei den Spielen mit Launcher-Kennzeichen.
+- Cover für Spiele ohne lokales Bild aus dem Steam-Shop (einmalig, zwischengespeichert; nur exakter Name oder anderer Editionszusatz).
 
 ### Fixed
 - Admin-Panel stürzte beim Beenden ab (Stapelüberlauf: Beenden schloss das Fenster, das Schließen rief wieder Beenden auf). Betraf „Beenden“ im Infobereich und das Selbst-Update.

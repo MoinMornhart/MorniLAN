@@ -24,7 +24,12 @@ internal static class InventoryCollector
         var uninstall = Try("Programmliste", UninstallRegistryScanner.Scan, (IReadOnlyList<UninstallEntry>)[]);
         var shortcuts = Try("Startmenü", StartMenuScanner.Scan, (IReadOnlyList<StartMenuShortcut>)[]);
         var store = Try("Store-Apps", StoreAppScanner.Scan, (IReadOnlyList<StoreApp>)[]);
+        IReadOnlyList<LauncherGame> none = [];
+        var launchers = Try("Epic", () => EpicScanner.FindManifestFolder() is { } folder ? EpicScanner.Scan(folder) : none, none)
+            .Concat(Try("GOG", GogScanner.Scan, none))
+            .Concat(Try("Ubisoft", UbisoftScanner.Scan, none))
+            .ToList();
 
-        return new Result(InventoryBuilder.Build(steam, uninstall, shortcuts, store), problems);
+        return new Result(InventoryBuilder.Build(steam, uninstall, shortcuts, store, launchers), problems);
     }
 }

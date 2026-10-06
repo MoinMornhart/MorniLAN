@@ -27,6 +27,13 @@ Ein Windows-PC, den ein Freund benutzt, soll vom PC des Admins aus verwaltet wer
 - Liest Steam aus:
   - `libraryfolders.vdf` und `appmanifest_*.acf` parsen und installierte Spiele samt Name, AppID, Größe und Icon an das Panel melden;
   - Spielstart über `steam://rungameid/<AppID>`.
+- Erkennt außerdem (M3.2, entschieden 2026-10-06):
+  - **Epic Games** über die Manifeste (`%ProgramData%\Epic\EpicGamesLauncher\Data\Manifests\*.item`), Start über `com.epicgames.launcher://apps/…?action=launch`;
+  - **GOG** über `HKLM\SOFTWARE\WOW6432Node\GOG.com\Games`, Start direkt über die EXE (DRM-frei);
+  - **Ubisoft Connect** über `HKLM\SOFTWARE\WOW6432Node\Ubisoft\Launcher\Installs`, Start über `uplay://launch/<id>/0`;
+  - **EA app** und **Battle.net** in der Windows-Programmliste am Deinstallationsprogramm des Launchers (`EAInstaller\…\Cleanup.exe`, `Blizzard Uninstaller.exe`), Start über EXE bzw. Verknüpfung.
+  - DLC, Engines und halb installierte Spiele werden ausgelassen. Programmeinträge und Verknüpfungen im Spielordner werden nicht doppelt gezeigt.
+- **Cover:** lokal (Steam-Cache), sonst einmalig aus dem Steam-Shop (Namenssuche, nur exakte Treffer oder anderer Editionszusatz). Dabei geht nur der Spielname an Steam, keine Daten über PC oder Nutzer. Ergebnisse liegen im Datenordner (`covers`), erfolglose Suchen werden 7 Tage nicht wiederholt.
 - Führt Admin-Befehle aus: Programm installieren (z. B. per winget), Neustart, Nachricht an den Benutzer, Sperre jetzt aktivieren.
 - Lokales Logging (Serilog) mit Log-Rotation.
 

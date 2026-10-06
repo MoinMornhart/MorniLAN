@@ -23,6 +23,7 @@ public sealed class AppItemViewModel
     private static readonly IBrush SteamBrush = new SolidColorBrush(Color.Parse("#4C8DFF"));
     private static readonly IBrush StoreBrush = new SolidColorBrush(Color.Parse("#B07CFF"));
     private static readonly IBrush ProgramBrush = new SolidColorBrush(Color.Parse("#5C6575"));
+    private static readonly IBrush LauncherBrush = new SolidColorBrush(Color.Parse("#1F9D57"));
 
     public AppItemViewModel(AppEntry app, InventoryStore store)
     {
@@ -39,7 +40,7 @@ public sealed class AppItemViewModel
     public bool HasCover => Cover is not null;
     public double Opacity => App.IsSystemComponent ? 0.55 : 1.0;
 
-    public string Badge => App.Source switch
+    public string Badge => App.Launcher ?? App.Source switch
     {
         AppSource.Steam => "Steam",
         AppSource.StoreApp => "Store",
@@ -47,12 +48,14 @@ public sealed class AppItemViewModel
         _ => App.IsSystemComponent ? "System" : "Programm",
     };
 
-    public IBrush BadgeBrush => App.Source switch
-    {
-        AppSource.Steam => SteamBrush,
-        AppSource.StoreApp => StoreBrush,
-        _ => ProgramBrush,
-    };
+    public IBrush BadgeBrush => App.Launcher is not null
+        ? LauncherBrush
+        : App.Source switch
+        {
+            AppSource.Steam => SteamBrush,
+            AppSource.StoreApp => StoreBrush,
+            _ => ProgramBrush,
+        };
 
     public string Details => string.Join(" · ", new[]
     {
@@ -172,15 +175,15 @@ public sealed partial class AppsViewModel : ObservableObject
                                        || (i.App.Publisher?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false))
                 && filter switch
                 {
-                    AppFilter.Games => i.App.Source == AppSource.Steam,
-                    AppFilter.Programs => i.App.Source is AppSource.InstalledProgram or AppSource.Custom,
+                    AppFilter.Games => i.App.IsGame,
+                    AppFilter.Programs => !i.App.IsGame && i.App.Source is AppSource.InstalledProgram or AppSource.Custom,
                     AppFilter.Store => i.App.Source == AppSource.StoreApp,
                     _ => true,
                 })
             .ToList();
 
-        Replace(Games, visible.Where(i => i.App.Source == AppSource.Steam));
-        Replace(Apps, visible.Where(i => i.App.Source != AppSource.Steam));
+        Replace(Games, visible.Where(i => i.App.IsGame));
+        Replace(Apps, visible.Where(i => !i.App.IsGame));
         HasGames = Games.Count > 0;
         HasApps = Apps.Count > 0;
         IsEmpty = visible.Count == 0;

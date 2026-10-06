@@ -265,8 +265,15 @@
                     <StackPanel>
                       <Panel Height="225" Background="#15181E">
                         <Image Source="{Binding Cover}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
-                        <TextBlock Text="{Binding Name}" IsVisible="{Binding !HasCover}" TextWrapping="Wrap" Margin="12"
-                                   VerticalAlignment="Center" HorizontalAlignment="Center" TextAlignment="Center" />
+                        <StackPanel IsVisible="{Binding !HasCover}" Spacing="10" Margin="12"
+                                    VerticalAlignment="Center" HorizontalAlignment="Center">
+                          <Image Source="{Binding Icon}" Width="48" Height="48" IsVisible="{Binding HasIcon}" />
+                          <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextAlignment="Center" />
+                        </StackPanel>
+                        <Border Background="{Binding BadgeBrush}" CornerRadius="4" Padding="6,2" Margin="6"
+                                HorizontalAlignment="Left" VerticalAlignment="Top">
+                          <TextBlock Text="{Binding Badge}" FontSize="10" Foreground="White" />
+                        </Border>
                       </Panel>
                       <StackPanel Margin="10,8" Spacing="2">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
