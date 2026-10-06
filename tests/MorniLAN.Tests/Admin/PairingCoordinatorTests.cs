@@ -140,5 +140,7 @@ public sealed class PairingCoordinatorTests : IDisposable
         public Task OnRefreshInventory() => Task.CompletedTask;
 
         public Task OnInstallUpdate() => Task.CompletedTask;
+
+        public Task OnPolicyChanged(MorniLAN.Shared.Models.AppPolicy policy) => Task.CompletedTask;
     }
 }

@@ -32,8 +32,8 @@ Portfreigaben am Router.
 </p>
 
 > [!NOTE]
-> MorniLAN ist in **früher Entwicklung**. Verbinden, Erkennen und Updates funktionieren schon,
-> die Freigaben per Schalter, der Launcher und die Sperren kommen als Nächstes (siehe [Fahrplan](#fahrplan)).
+> MorniLAN ist in **früher Entwicklung**. Verbinden, Erkennen, Freigaben und Updates funktionieren schon,
+> der richtige Vollbild-Launcher und das Durchsetzen der Sperren kommen als Nächstes (siehe [Fahrplan](#fahrplan)).
 
 ## So funktioniert's
 
@@ -90,7 +90,7 @@ Ausführliche Anleitung mit Fehlersuche: [docs/einrichtung.md](docs/einrichtung.
 | 📊 | **Übersicht:** online/offline, CPU, Arbeitsspeicher, Laufwerk | ✅ fertig |
 | 🎮 | **Spiele und Programme erkennen:** Steam, Epic Games, GOG, Ubisoft Connect, EA app, Battle.net, Microsoft Store und alle installierten Programme, mit Covern und Icons. Systemkomponenten werden ausgeblendet | ✅ in der Beta |
 | 🔄 | **Automatische Updates:** Das Panel bietet neue Versionen an, die PCs aktualisieren sich selbst, aber nie mitten im Spiel | ✅ in der Beta |
-| ✅ | **Freigaben:** per Schalter festlegen, was gestartet werden darf | 🔜 als Nächstes |
+| ✅ | **Freigaben:** per Schalter festlegen, was im Launcher erscheint (Standard: alles frei), eigene Einträge für Programme, die MorniLAN nicht selbst findet | ✅ in der Beta |
 | 🖥️ | **Launcher statt Desktop:** Vollbild mit Kacheln, Suche und „Zuletzt gespielt“ | 🔜 geplant |
 | 🔒 | **Sperren:** nur Freigegebenes läuft, Systemeinstellungen sind geschützt, mit Notfall-Entsperrung | 🔜 geplant |
 | 📺 | **Fernzugriff:** seinen Bildschirm sehen und helfen, über Sunshine und Moonlight | 🔜 geplant |
@@ -122,7 +122,7 @@ dem Start über seine Prüfsumme (SHA-256) geprüft.
 - [x] 2.5 Einrichtung ohne Konsole: Setups, Windows-Dienst, Firewall per Knopf, Diagnose
 - [x] 3. Programme und Spiele erkennen (alle großen Launcher, Cover, Icons)
 - [x] Automatische Updates (vorgezogen aus Schritt 9)
-- [ ] 4. Freigaben
+- [x] 4. Freigaben (Schalter je PC, eigene Einträge, einfache Kacheln im Launcher)
 - [ ] 5. Launcher als Shell
 - [ ] 6. Sperren durchsetzen und Notfall-Entsperrung
 - [ ] 7. Fernzugriff (Sunshine/Moonlight)

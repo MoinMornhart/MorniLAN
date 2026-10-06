@@ -220,7 +220,7 @@
           </Border>
         </StackPanel>
 
-        <!-- Freigaben: was auf dem PC installiert ist (Schalter folgen in M4) -->
+        <!-- Freigaben: was auf dem PC installiert ist, mit Schalter je Eintrag -->
         <StackPanel Spacing="16" IsVisible="{Binding IsApps}">
           <Grid ColumnDefinitions="*,Auto">
             <TextBlock Text="Freigaben" FontSize="28" FontWeight="SemiBold" />
@@ -232,7 +232,39 @@
             </StackPanel>
           </Grid>
           <TextBlock Classes="muted" TextWrapping="Wrap"
-                     Text="Alles, was auf dem PC installiert ist. Freigeben per Schalter kommt im nächsten Schritt (Meilenstein 4)." />
+                     Text="Alles, was auf dem PC installiert ist. Der Schalter legt fest, was im Launcher erscheint. Standard: alles frei, du sperrst gezielt. (Wirklich blockiert wird Gesperrtes ab Meilenstein 6.)" />
+
+          <!-- Stand auf dem PC, Sammel-Knöpfe, eigener Eintrag -->
+          <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding Apps.HasDevice}">
+            <Ellipse Width="10" Height="10" Fill="{Binding Apps.PolicyBrush}" VerticalAlignment="Center" />
+            <TextBlock Grid.Column="1" Margin="10,0" Text="{Binding Apps.PolicyStatus}" VerticalAlignment="Center"
+                       TextWrapping="Wrap" />
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+              <Button Content="Sichtbare freigeben" Command="{Binding Apps.AllowVisibleCommand}"
+                      ToolTip.Tip="Alle Einträge, die Suche und Filter gerade zeigen" />
+              <Button Content="Sichtbare sperren" Command="{Binding Apps.BlockVisibleCommand}"
+                      ToolTip.Tip="Alle Einträge, die Suche und Filter gerade zeigen" />
+              <Button Content="Eigener Eintrag …" Command="{Binding Apps.ToggleCustomFormCommand}" />
+            </StackPanel>
+          </Grid>
+
+          <Border Classes="card" IsVisible="{Binding Apps.ShowCustomForm}">
+            <StackPanel Spacing="10">
+              <TextBlock Text="Eigenen Eintrag hinzufügen" Classes="h2" />
+              <TextBlock Classes="muted" TextWrapping="Wrap"
+                         Text="Für Programme, die MorniLAN nicht selbst findet. Der Pfad gilt auf dem verwalteten PC, z. B. C:\Spiele\MeinSpiel\spiel.exe. Das Icon holt sich der PC aus der Datei." />
+              <Grid ColumnDefinitions="*,2*,*" ColumnSpacing="10">
+                <TextBox Text="{Binding Apps.CustomName}" PlaceholderText="Name, z. B. Minecraft" />
+                <TextBox Grid.Column="1" Text="{Binding Apps.CustomPath}" PlaceholderText="C:\Pfad\zum\Programm.exe" />
+                <TextBox Grid.Column="2" Text="{Binding Apps.CustomArguments}" PlaceholderText="Argumente (optional)" />
+              </Grid>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="Hinzufügen" Classes="accent" Command="{Binding Apps.AddCustomCommand}" />
+                <Button Content="Abbrechen" Command="{Binding Apps.ToggleCustomFormCommand}" />
+                <TextBlock Text="{Binding Apps.CustomError}" Foreground="#FF6B6B" VerticalAlignment="Center" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
 
           <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBox Text="{Binding Apps.SearchText}" PlaceholderText="Suchen nach Name oder Hersteller …" />
@@ -241,6 +273,7 @@
               <ComboBoxItem Content="Spiele" />
               <ComboBoxItem Content="Programme" />
               <ComboBoxItem Content="Store-Apps" />
+              <ComboBoxItem Content="Gesperrt" />
             </ComboBox>
             <ToggleSwitch Grid.Column="2" Margin="16,0,0,0" IsChecked="{Binding Apps.ShowSystem}"
                           OnContent="Systemkomponenten anzeigen" OffContent="Systemkomponenten anzeigen" />
@@ -262,7 +295,7 @@
                 <DataTemplate x:DataType="vm:AppItemViewModel">
                   <Border Width="150" Margin="0,0,14,14" CornerRadius="8" Background="#1A1E26" ClipToBounds="True"
                           ToolTip.Tip="{Binding Details}">
-                    <StackPanel>
+                    <StackPanel Opacity="{Binding Opacity}">
                       <Panel Height="225" Background="#15181E">
                         <Image Source="{Binding Cover}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
                         <StackPanel IsVisible="{Binding !HasCover}" Spacing="10" Margin="12"
@@ -277,7 +310,8 @@
                       </Panel>
                       <StackPanel Margin="10,8" Spacing="2">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
-                        <TextBlock Text="{Binding Details}" Classes="label" TextTrimming="CharacterEllipsis" />
+                        <ToggleSwitch IsChecked="{Binding IsAllowed}" OnContent="freigegeben" OffContent="gesperrt" AutomationProperties.Name="{Binding Name}"
+                                      FontSize="12" />
                       </StackPanel>
                     </StackPanel>
                   </Border>
@@ -293,15 +327,15 @@
               <ItemsControl ItemsSource="{Binding Apps.Apps}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:AppItemViewModel">
-                    <Grid ColumnDefinitions="Auto,*,Auto" Margin="8,6" Opacity="{Binding Opacity}">
-                      <Panel Width="36" Height="36" Margin="0,0,14,0" VerticalAlignment="Center">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="8,6">
+                      <Panel Width="36" Height="36" Margin="0,0,14,0" VerticalAlignment="Center" Opacity="{Binding Opacity}">
                         <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="32" Height="32" />
                         <Border IsVisible="{Binding !HasIcon}" CornerRadius="8" Background="#262B35">
                           <TextBlock Text="{Binding Initial}" FontWeight="Bold" HorizontalAlignment="Center"
                                      VerticalAlignment="Center" Foreground="#9AA3B2" />
                         </Border>
                       </Panel>
-                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                      <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1" Opacity="{Binding Opacity}">
                         <TextBlock Text="{Binding Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                         <TextBlock Text="{Binding Details}" Classes="label" TextTrimming="CharacterEllipsis" />
                       </StackPanel>
@@ -309,6 +343,12 @@
                               Background="{Binding BadgeBrush}">
                         <TextBlock Text="{Binding Badge}" FontSize="11" Foreground="White" />
                       </Border>
+                      <Button Grid.Column="3" Margin="10,0,0,0" Content="Entfernen" IsVisible="{Binding IsCustom}"
+                              VerticalAlignment="Center"
+                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Apps.RemoveCustomCommand}"
+                              CommandParameter="{Binding}" />
+                      <ToggleSwitch Grid.Column="4" Margin="12,0,0,0" MinWidth="130" IsChecked="{Binding IsAllowed}" AutomationProperties.Name="{Binding Name}"
+                                    OnContent="freigegeben" OffContent="gesperrt" VerticalAlignment="Center" />
                     </Grid>
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>

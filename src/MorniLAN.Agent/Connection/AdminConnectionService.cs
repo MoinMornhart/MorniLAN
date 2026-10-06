@@ -25,7 +25,9 @@ internal sealed class AdminConnectionService(
     ILogger<AdminConnectionService> logger,
     DiscoveryListener? discovery = null,
     InventoryService? inventory = null,
-    Updates.AgentUpdateService? updates = null) : BackgroundService
+    Updates.AgentUpdateService? updates = null,
+    Policy.AgentPolicyStore? policy = null,
+    Policy.LauncherCatalog? catalog = null) : BackgroundService
 {
     private static readonly TimeSpan[] Backoff =
         [TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30)];
@@ -51,7 +53,7 @@ internal sealed class AdminConnectionService(
         new(State, State == AgentLinkState.WaitingForPairing && PairingCode is { } code
                 ? Shared.Connection.PairingCode.Format(code)
                 : null,
-            AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow);
+            AdminName, _deviceInfo.MachineName, VersionInfo.Display, DateTimeOffset.UtcNow, catalog?.Current().Hash);
 
     public event Action<AgentLinkState>? StateChanged;
 
@@ -127,6 +129,14 @@ internal sealed class AdminConnectionService(
                 refreshRequested.Release();
         });
         connection.On(nameof(IAgentClient.OnInstallUpdate), () => updates?.RequestNow());
+        connection.On<AppPolicy>(nameof(IAgentClient.OnPolicyChanged), async received =>
+        {
+            try { await ApplyPolicyAsync(connection, received, authoritative: false, refreshRequested, stoppingToken); }
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+            {
+                logger.LogWarning("Freigaben nicht übernommen: {Error}", ex.Message);
+            }
+        });
 
         try
         {
@@ -170,6 +180,20 @@ internal sealed class AdminConnectionService(
             });
             SetState(AgentLinkState.Online);
             logger.LogInformation("Online bei Admin-Panel {Name}", hello.AdminName);
+
+            // Freigaben abholen: Was das Panel jetzt sagt, gilt (auch wenn es neu eingerichtet wurde)
+            if (policy is not null)
+            {
+                try
+                {
+                    var current = await connection.InvokeAsync<AppPolicy>(nameof(IAdminHub.GetPolicy), stoppingToken);
+                    await ApplyPolicyAsync(connection, current, authoritative: true, refreshRequested, stoppingToken);
+                }
+                catch (Microsoft.AspNetCore.SignalR.HubException ex)
+                {
+                    logger.LogInformation("Panel liefert keine Freigaben (ältere Version?): {Error}", ex.Message);
+                }
+            }
 
             using var session = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
             var inventorySync = inventory is null
@@ -363,7 +387,28 @@ internal sealed class AdminConnectionService(
     private void ForgetAdmin()
     {
         store.Update(s => s with { Admin = null });
+        policy?.Reset();
         NewPairingCode();
+    }
+
+    /// <summary>
+    /// Freigaben übernehmen und dem Panel melden, welcher Stand jetzt gilt. Sind eigene Einträge dazugekommen
+    /// oder weggefallen, geht die Programmliste neu ans Panel (mit Icon aus der EXE).
+    /// </summary>
+    private async Task ApplyPolicyAsync(HubConnection connection, AppPolicy received, bool authoritative,
+        SemaphoreSlim refreshRequested, CancellationToken cancellationToken)
+    {
+        if (policy is null)
+            return;
+        var before = policy.Current.CustomApps;
+        if (policy.Apply(received, authoritative))
+        {
+            logger.LogInformation("Freigaben übernommen (Stand {Revision}, {Rules} Ausnahmen, {Custom} eigene Einträge)",
+                received.Revision, received.Rules.Length, received.CustomApps.Length);
+            if (!before.SequenceEqual(received.CustomApps) && refreshRequested.CurrentCount == 0)
+                refreshRequested.Release();
+        }
+        await connection.InvokeAsync(nameof(IAdminHub.ReportPolicyApplied), policy.Current.Revision, cancellationToken);
     }
 
     private string PairingCodeOrNew() => PairingCode ?? NewPairingCode();

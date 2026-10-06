@@ -14,6 +14,7 @@ internal sealed class AgentHub(
     PairingCoordinator pairing,
     AdminIdentity identity,
     InventoryStore inventory,
+    PolicyStore policies,
     TimeProvider time,
     ILogger<AgentHub> logger) : Hub<IAgentClient>, IAdminHub
 {
@@ -110,6 +111,16 @@ internal sealed class AgentHub(
         var deviceId = RequirePairedDevice();
         var message = state.Message.Length <= 300 ? state.Message : state.Message[..300];
         registry.MarkUpdateState(deviceId, Context.ConnectionId, state with { Message = message });
+        return Task.CompletedTask;
+    }
+
+    public Task<AppPolicy> GetPolicy() => Task.FromResult(policies.Get(RequirePairedDevice()));
+
+    public Task ReportPolicyApplied(long revision)
+    {
+        var deviceId = RequirePairedDevice();
+        policies.MarkApplied(deviceId, revision);
+        logger.LogInformation("PC {DeviceId} wendet Freigaben-Stand {Revision} an", deviceId, revision);
         return Task.CompletedTask;
     }
 

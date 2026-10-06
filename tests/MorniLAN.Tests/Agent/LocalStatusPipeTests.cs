@@ -43,7 +43,7 @@ public sealed class LocalStatusPipeTests : IDisposable
         var connection = new AdminConnectionService(options, new AgentStateStore(_dir.Path),
             AgentIdentity.LoadOrCreate(_dir.Path, NullLogger.Instance), new SystemStatusCollector(),
             NullLogger<AdminConnectionService>.Instance);
-        return new LocalStatusServer(connection, log, pipeName, grantCurrentUser);
+        return new LocalStatusServer(() => LocalStatusPipe.Serialize(connection.LocalStatus()), log, pipeName, grantCurrentUser);
     }
 
     private static string NewPipeName() => "MorniLAN.Test." + Guid.NewGuid().ToString("N");

@@ -1,14 +1,97 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:MorniLAN.Launcher"
         x:Class="MorniLAN.Launcher.MainWindow"
         Title="MorniLAN"
         Icon="avares://MorniLAN.Launcher/Assets/mornilan.ico"
         Width="1280" Height="720"
         WindowStartupLocation="CenterScreen"
         Background="#0F1115">
-  <!-- Kacheln mit freigegebenen Apps folgen ab Meilenstein 4/5. Bis dahin: Status und Pairing-Code. -->
+  <!-- M4: einfache Kacheln mit den freigegebenen Apps. Das richtige Vollbild mit Suche und Leiste kommt in M5. -->
+  <Window.Styles>
+    <Style Selector="Button.tile">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0,0,18,18" />
+      <Setter Property="Background" Value="#1A1E26" />
+      <Setter Property="CornerRadius" Value="10" />
+      <Setter Property="ClipToBounds" Value="True" />
+      <Setter Property="Cursor" Value="Hand" />
+      <Setter Property="VerticalContentAlignment" Value="Stretch" />
+      <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    </Style>
+    <Style Selector="Button.tile:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="#262B35" />
+    </Style>
+  </Window.Styles>
+
   <Grid RowDefinitions="*,Auto">
-    <StackPanel Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
+    <!-- Kacheln -->
+    <ScrollViewer x:Name="TilesView" IsVisible="False" Padding="40,32,22,16">
+      <StackPanel Spacing="14">
+        <TextBlock Text="MorniLAN" FontSize="30" FontWeight="Bold" Foreground="#E8EAF0" />
+
+        <StackPanel x:Name="GamesSection" Spacing="12">
+          <TextBlock Text="Spiele" FontSize="20" FontWeight="SemiBold" Foreground="#9AA3B2" />
+          <ItemsControl x:Name="GamesList">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="local:LauncherTile">
+                <Button Classes="tile" Width="180" Click="OnTileClick" ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
+                  <StackPanel>
+                    <Panel Height="270" Background="#15181E">
+                      <Image Source="{Binding Cover}" Stretch="UniformToFill" IsVisible="{Binding HasCover}" />
+                      <StackPanel IsVisible="{Binding !HasCover}" Spacing="12" Margin="14"
+                                  VerticalAlignment="Center" HorizontalAlignment="Center">
+                        <Image Source="{Binding Icon}" Width="64" Height="64" IsVisible="{Binding HasIcon}" />
+                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap" TextAlignment="Center" FontSize="16"
+                                   Foreground="#E8EAF0" />
+                      </StackPanel>
+                    </Panel>
+                    <TextBlock Text="{Binding Name}" Margin="12,10" FontWeight="SemiBold" Foreground="#E8EAF0"
+                               TextTrimming="CharacterEllipsis" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <StackPanel x:Name="AppsSection" Spacing="12">
+          <TextBlock Text="Apps" FontSize="20" FontWeight="SemiBold" Foreground="#9AA3B2" />
+          <ItemsControl x:Name="AppsList">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="local:LauncherTile">
+                <Button Classes="tile" Width="150" Height="130" Click="OnTileClick" ToolTip.Tip="{Binding Name}" AutomationProperties.Name="{Binding Name}">
+                  <StackPanel Spacing="12" VerticalAlignment="Center" HorizontalAlignment="Center" Margin="10">
+                    <Panel Width="48" Height="48" HorizontalAlignment="Center">
+                      <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" />
+                      <Border IsVisible="{Binding !HasIcon}" CornerRadius="10" Background="#262B35">
+                        <TextBlock Text="{Binding Initial}" FontSize="22" FontWeight="Bold" Foreground="#9AA3B2"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                      </Border>
+                    </Panel>
+                    <TextBlock Text="{Binding Name}" TextAlignment="Center" TextTrimming="CharacterEllipsis"
+                               MaxWidth="130" Foreground="#E8EAF0" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- Begrüßung, Pairing oder „noch nichts freigegeben“ -->
+    <StackPanel x:Name="WelcomeView" Grid.Row="0" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12">
       <TextBlock Text="MorniLAN" FontSize="56" FontWeight="Bold" HorizontalAlignment="Center"
                  Foreground="#E8EAF0" />
       <TextBlock x:Name="Subtitle" Text="Launcher – deine freigegebenen Apps und Spiele erscheinen hier."

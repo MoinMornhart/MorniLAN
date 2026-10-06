@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using MorniLAN.Admin.Server;
 using MorniLAN.Shared.Models;
+using Serilog;
 
 namespace MorniLAN.Admin.ViewModels;
 
@@ -16,20 +17,28 @@ public sealed record DeviceChoice(Guid Id, string Name)
     public override string ToString() => Name;
 }
 
-/// <summary>Ein Programm, Spiel oder eine Store-App in der Liste.</summary>
-public sealed class AppItemViewModel
+/// <summary>Ein Programm, Spiel oder eine Store-App in der Liste, mit Schalter „freigegeben“.</summary>
+public sealed partial class AppItemViewModel : ObservableObject
 {
     private static readonly CultureInfo German = CultureInfo.GetCultureInfo("de-DE");
     private static readonly IBrush SteamBrush = new SolidColorBrush(Color.Parse("#4C8DFF"));
     private static readonly IBrush StoreBrush = new SolidColorBrush(Color.Parse("#B07CFF"));
     private static readonly IBrush ProgramBrush = new SolidColorBrush(Color.Parse("#5C6575"));
     private static readonly IBrush LauncherBrush = new SolidColorBrush(Color.Parse("#1F9D57"));
+    private static readonly IBrush CustomBrush = new SolidColorBrush(Color.Parse("#B7791F"));
 
-    public AppItemViewModel(AppEntry app, InventoryStore store)
+    private readonly Action<AppItemViewModel, bool> _setAllowed;
+    private bool _syncing;
+
+    public AppItemViewModel(AppEntry app, InventoryStore store, bool allowed, Action<AppItemViewModel, bool> setAllowed)
     {
         App = app;
         Icon = Load(store.ImagePath(app.IconHash));
         Cover = Load(store.ImagePath(app.CoverHash));
+        _setAllowed = setAllowed;
+        _syncing = true;
+        IsAllowed = allowed;
+        _syncing = false;
     }
 
     public AppEntry App { get; }
@@ -38,7 +47,29 @@ public sealed class AppItemViewModel
     public Bitmap? Cover { get; }
     public bool HasIcon => Icon is not null;
     public bool HasCover => Cover is not null;
-    public double Opacity => App.IsSystemComponent ? 0.55 : 1.0;
+    public bool IsCustom => App.Source == AppSource.Custom;
+
+    /// <summary>Freigegeben (im Launcher sichtbar, ab M6 auch startbar). Ändern speichert sofort.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Opacity), nameof(StateText))]
+    public partial bool IsAllowed { get; set; }
+
+    partial void OnIsAllowedChanged(bool value)
+    {
+        if (!_syncing)
+            _setAllowed(this, value);
+    }
+
+    /// <summary>Stand von außen übernehmen, ohne erneut zu speichern.</summary>
+    internal void Sync(bool allowed)
+    {
+        _syncing = true;
+        IsAllowed = allowed;
+        _syncing = false;
+    }
+
+    public double Opacity => App.IsSystemComponent || !IsAllowed ? 0.55 : 1.0;
+    public string StateText => IsAllowed ? "freigegeben" : "gesperrt";
 
     public string Badge => App.Launcher ?? App.Source switch
     {
@@ -54,6 +85,7 @@ public sealed class AppItemViewModel
         {
             AppSource.Steam => SteamBrush,
             AppSource.StoreApp => StoreBrush,
+            AppSource.Custom => CustomBrush,
             _ => ProgramBrush,
         };
 
@@ -62,7 +94,7 @@ public sealed class AppItemViewModel
         App.Publisher,
         App.Version is { Length: > 0 } v && App.Source != AppSource.StoreApp ? $"Version {v}" : null,
         App.SizeBytes is { } size and > 0 ? FormatSize(size) : null,
-        App.Source == AppSource.InstalledProgram ? App.ExecutablePath : null,
+        App.Source is AppSource.InstalledProgram or AppSource.Custom ? App.ExecutablePath : null,
     }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
     public string Initial => Name.Length > 0 ? char.ToUpperInvariant(Name[0]).ToString() : "?";
@@ -86,13 +118,15 @@ public enum AppFilter
     Games,
     Programs,
     Store,
+    Blocked,
 }
 
-/// <summary>Seite „Freigaben“: was auf dem PC installiert ist. Die Schalter zum Freigeben kommen in M4.</summary>
+/// <summary>Seite „Freigaben“: was auf dem PC installiert ist und was davon freigegeben ist.</summary>
 public sealed partial class AppsViewModel : ObservableObject
 {
     private readonly Func<AdminServer?> _server;
     private List<AppItemViewModel> _all = [];
+    private List<AppItemViewModel> _visible = [];
     private DateTimeOffset? _collectedAt;
 
     public AppsViewModel(Func<AdminServer?> server)
@@ -115,7 +149,25 @@ public sealed partial class AppsViewModel : ObservableObject
     [ObservableProperty] public partial bool IsEmpty { get; set; } = true;
     [ObservableProperty] public partial string RefreshMessage { get; set; } = "";
 
-    partial void OnSelectedDeviceChanged(DeviceChoice? value) => LoadReport();
+    /// <summary>Kommt der eingestellte Stand auf dem PC an?</summary>
+    [ObservableProperty] public partial string PolicyStatus { get; set; } = "";
+    [ObservableProperty] public partial IBrush PolicyBrush { get; set; } = DeviceViewModel.OfflineBrush;
+
+    // Eigener Eintrag
+    [ObservableProperty] public partial bool ShowCustomForm { get; set; }
+    [ObservableProperty] public partial string CustomName { get; set; } = "";
+    [ObservableProperty] public partial string CustomPath { get; set; } = "";
+    [ObservableProperty] public partial string CustomArguments { get; set; } = "";
+    [ObservableProperty] public partial string CustomError { get; set; } = "";
+
+    public bool HasDevice => SelectedDevice is not null;
+
+    partial void OnSelectedDeviceChanged(DeviceChoice? value)
+    {
+        OnPropertyChanged(nameof(HasDevice));
+        LoadReport();
+    }
+
     partial void OnSearchTextChanged(string value) => ApplyFilter();
     partial void OnFilterIndexChanged(int value) => ApplyFilter();
     partial void OnShowSystemChanged(bool value) => ApplyFilter();
@@ -128,6 +180,18 @@ public sealed partial class AppsViewModel : ObservableObject
             LoadReport();
     }
 
+    /// <summary>Freigaben geändert (hier oder bestätigt vom PC): Schalter und Status abgleichen.</summary>
+    public void PolicyChanged(Guid deviceId)
+    {
+        if (deviceId != SelectedDevice?.Id || _server() is not { } server)
+            return;
+        var policy = server.Policies.Get(deviceId);
+        foreach (var item in _all)
+            item.Sync(policy.IsAllowed(item.App.Id));
+        UpdatePolicyStatus();
+        ApplyFilter();
+    }
+
     /// <summary>Nur die Geräteauswahl abgleichen (billig, läuft regelmäßig). Lädt nur bei geänderter Auswahl.</summary>
     public void SyncDevices()
     {
@@ -136,7 +200,10 @@ public sealed partial class AppsViewModel : ObservableObject
         var devices = server.Registry.Snapshot().Select(d => new DeviceChoice(d.Device.DeviceId,
             d.Info?.MachineName ?? d.Device.MachineName)).ToList();
         if (devices.SequenceEqual(Devices))
+        {
+            UpdatePolicyStatus(); // online/offline kann sich geändert haben
             return;
+        }
         var selected = SelectedDevice?.Id;
         Devices.Clear();
         foreach (var device in devices)
@@ -153,24 +220,32 @@ public sealed partial class AppsViewModel : ObservableObject
             _all = [];
             _collectedAt = null;
             EmptyText = "Noch kein PC gekoppelt. Sobald einer gekoppelt ist, erscheinen hier seine Programme und Spiele.";
+            PolicyStatus = "";
             ApplyFilter();
             return;
         }
         var report = server.Inventory.Get(device.Id);
-        _all = report?.Apps.Select(a => new AppItemViewModel(a, server.Inventory)).ToList() ?? [];
+        var policy = server.Policies.Get(device.Id);
+        var apps = (report?.Apps ?? []).ToList();
+        // Eigene Einträge, die der PC noch nicht zurückgemeldet hat (offline), trotzdem zeigen
+        foreach (var custom in policy.CustomApps.Where(c => apps.All(a => a.Id != c.Id)))
+            apps.Add(new AppEntry(custom.Id, custom.Name, AppSource.Custom, ExecutablePath: custom.ExecutablePath,
+                LaunchArguments: custom.Arguments));
+        _all = apps.Select(a => new AppItemViewModel(a, server.Inventory, policy.IsAllowed(a.Id), SetAllowed)).ToList();
         _collectedAt = report?.CollectedAt;
         EmptyText = report is null
             ? $"„{device.Name}“ hat noch keine Programmliste geschickt. Ist der PC online? Sonst auf „Neu einlesen“ klicken."
             : "Nichts gefunden. Suche oder Filter anpassen.";
+        UpdatePolicyStatus();
         ApplyFilter();
     }
 
     private void ApplyFilter()
     {
-        var filter = (AppFilter)Math.Clamp(FilterIndex, 0, 3);
+        var filter = (AppFilter)Math.Clamp(FilterIndex, 0, 4);
         var search = SearchText.Trim();
-        var visible = _all.Where(i =>
-                (ShowSystem || !i.App.IsSystemComponent)
+        _visible = _all.Where(i =>
+                (ShowSystem || !i.App.IsSystemComponent || filter == AppFilter.Blocked)
                 && (search.Length == 0 || i.Name.Contains(search, StringComparison.CurrentCultureIgnoreCase)
                                        || (i.App.Publisher?.Contains(search, StringComparison.CurrentCultureIgnoreCase) ?? false))
                 && filter switch
@@ -178,22 +253,54 @@ public sealed partial class AppsViewModel : ObservableObject
                     AppFilter.Games => i.App.IsGame,
                     AppFilter.Programs => !i.App.IsGame && i.App.Source is AppSource.InstalledProgram or AppSource.Custom,
                     AppFilter.Store => i.App.Source == AppSource.StoreApp,
+                    AppFilter.Blocked => !i.IsAllowed,
                     _ => true,
                 })
             .ToList();
 
-        Replace(Games, visible.Where(i => i.App.IsGame));
-        Replace(Apps, visible.Where(i => !i.App.IsGame));
+        Replace(Games, _visible.Where(i => i.App.IsGame));
+        Replace(Apps, _visible.Where(i => !i.App.IsGame));
         HasGames = Games.Count > 0;
         HasApps = Apps.Count > 0;
-        IsEmpty = visible.Count == 0;
+        IsEmpty = _visible.Count == 0;
+        if (IsEmpty && filter == AppFilter.Blocked && _all.Count > 0)
+            EmptyText = "Nichts gesperrt: Auf diesem PC ist alles freigegeben.";
 
         var hiddenSystem = _all.Count(i => i.App.IsSystemComponent);
+        var blocked = _all.Count(i => !i.IsAllowed);
         Summary = _all.Count == 0
             ? ""
-            : $"{visible.Count} von {_all.Count} Einträgen" +
+            : $"{_visible.Count} von {_all.Count} Einträgen" +
+              (blocked > 0 ? $" · {blocked} gesperrt" : " · alles freigegeben") +
               (ShowSystem || hiddenSystem == 0 ? "" : $" · {hiddenSystem} Systemkomponenten ausgeblendet") +
               (_collectedAt is { } at ? $" · Stand {at.ToLocalTime():dd.MM. HH:mm} Uhr" : "");
+    }
+
+    private void UpdatePolicyStatus()
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+        {
+            PolicyStatus = "";
+            return;
+        }
+        var online = server.Registry.ConnectionIdOf(device.Id) is not null;
+        if (server.Policies.Get(device.Id).Revision == 0)
+        {
+            PolicyStatus = "Noch nichts eingestellt: Alles ist freigegeben. Sperren per Schalter.";
+            PolicyBrush = DeviceViewModel.OfflineBrush;
+        }
+        else if (server.Policies.IsApplied(device.Id))
+        {
+            PolicyStatus = "✓ Der PC hat die aktuellen Freigaben.";
+            PolicyBrush = DeviceViewModel.OnlineBrush;
+        }
+        else
+        {
+            PolicyStatus = online
+                ? "Wird an den PC übertragen …"
+                : "Gespeichert. Der PC übernimmt die Änderungen, sobald er online ist.";
+            PolicyBrush = DeviceViewModel.WarnBrush;
+        }
     }
 
     private static void Replace(ObservableCollection<AppItemViewModel> target, IEnumerable<AppItemViewModel> items)
@@ -201,6 +308,60 @@ public sealed partial class AppsViewModel : ObservableObject
         target.Clear();
         foreach (var item in items)
             target.Add(item);
+    }
+
+    private void SetAllowed(AppItemViewModel item, bool allowed) =>
+        ChangePolicy((p, now) => p.WithAllowed([item.App.Id], allowed, now));
+
+    /// <summary>Alle gerade sichtbaren Einträge (Suche und Filter) auf einmal.</summary>
+    [RelayCommand]
+    private void AllowVisible() => SetVisible(true);
+
+    [RelayCommand]
+    private void BlockVisible() => SetVisible(false);
+
+    private void SetVisible(bool allowed)
+    {
+        var ids = _visible.Select(i => i.App.Id).ToList();
+        if (ids.Count > 0)
+            ChangePolicy((p, now) => p.WithAllowed(ids, allowed, now));
+    }
+
+    [RelayCommand]
+    private void ToggleCustomForm()
+    {
+        ShowCustomForm = !ShowCustomForm;
+        CustomError = "";
+    }
+
+    [RelayCommand]
+    private void AddCustom()
+    {
+        if (CustomApp.Validate(CustomName, CustomPath) is { } error)
+        {
+            CustomError = error;
+            return;
+        }
+        var app = new CustomApp(AppId.ForCustom(Guid.NewGuid()), CustomName.Trim(), CustomPath.Trim().Trim('"'),
+            string.IsNullOrWhiteSpace(CustomArguments) ? null : CustomArguments.Trim());
+        ChangePolicy((p, now) => p.WithCustomApp(app, now), reload: true);
+        CustomName = CustomPath = CustomArguments = CustomError = "";
+        ShowCustomForm = false;
+    }
+
+    [RelayCommand]
+    private void RemoveCustom(AppItemViewModel item) =>
+        ChangePolicy((p, now) => p.WithoutCustomApp(item.App.Id, now), reload: true);
+
+    private void ChangePolicy(Func<AppPolicy, DateTimeOffset, AppPolicy> change, bool reload = false)
+    {
+        if (_server() is not { } server || SelectedDevice is not { } device)
+            return;
+        var task = server.UpdatePolicyAsync(device.Id, change);
+        if (reload)
+            LoadReport();
+        _ = task.ContinueWith(t => Log.Warning(t.Exception?.GetBaseException(), "Freigaben nicht übertragen"),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     [RelayCommand]

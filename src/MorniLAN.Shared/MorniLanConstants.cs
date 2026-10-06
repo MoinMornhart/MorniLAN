@@ -11,6 +11,9 @@ public static class MorniLanConstants
     /// <summary>Named Pipe zwischen Launcher (Benutzer) und Agent (LocalSystem).</summary>
     public const string LauncherPipeName = "MorniLAN.Launcher";
 
+    /// <summary>Named Pipe mit den freigegebenen Apps für den Launcher.</summary>
+    public const string LauncherAppsPipeName = "MorniLAN.Launcher.Apps";
+
     /// <summary>TCP-Port, auf dem das Admin-Panel Agent-Verbindungen annimmt.</summary>
     public const int AdminPort = 47950;
 

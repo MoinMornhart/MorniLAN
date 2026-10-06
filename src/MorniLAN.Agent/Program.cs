@@ -3,6 +3,8 @@ using MorniLAN.Agent;
 using MorniLAN.Agent.Connection;
 using MorniLAN.Agent.Inventory;
 using MorniLAN.Agent.Platform;
+using MorniLAN.Agent.Policy;
+using MorniLAN.Shared.Connection;
 using MorniLAN.Agent.Updates;
 using MorniLAN.Shared;
 using Serilog;
@@ -58,7 +60,10 @@ builder.Services.AddSingleton(sp => AgentIdentity.LoadOrCreate(
     sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory,
     sp.GetRequiredService<ILogger<AgentIdentity>>()));
 builder.Services.AddSingleton<SystemStatusCollector>();
+builder.Services.AddSingleton(sp => new AgentPolicyStore(
+    sp.GetRequiredService<IOptions<AgentConnectionOptions>>().Value.DataDirectory));
 builder.Services.AddSingleton<InventoryService>();
+builder.Services.AddSingleton<LauncherCatalog>();
 builder.Services.AddSingleton<AgentUpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
 builder.Services.AddSingleton<DiscoveryListener>();
@@ -67,7 +72,19 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscoveryListener>
 builder.Services.AddHostedService<AgentWorker>();
 builder.Services.AddSingleton<AdminConnectionService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AdminConnectionService>());
-builder.Services.AddHostedService<LocalStatusServer>();
+// Zwei Kanäle zum Launcher: Status (klein, alle 2 s) und freigegebene Apps mit Bildern (nur bei Änderung)
+builder.Services.AddHostedService(sp =>
+{
+    var connection = sp.GetRequiredService<AdminConnectionService>();
+    return new LocalStatusServer(() => LocalStatusPipe.Serialize(connection.LocalStatus()),
+        sp.GetRequiredService<ILogger<LocalStatusServer>>());
+});
+builder.Services.AddHostedService(sp =>
+{
+    var catalog = sp.GetRequiredService<LauncherCatalog>();
+    return new LocalStatusServer(() => LauncherAppsPipe.Serialize(catalog.Current()),
+        sp.GetRequiredService<ILogger<LocalStatusServer>>(), MorniLanConstants.LauncherAppsPipeName);
+});
 
 var host = builder.Build();
 host.Run();
