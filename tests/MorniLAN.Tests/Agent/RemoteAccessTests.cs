@@ -116,21 +116,70 @@ public sealed class RemoteAccessTests : IDisposable
     }
 
     [Fact]
-    public async Task SunshineInstaller_UsesWinget_WithExpectedArgs()
+    public async Task SunshineInstaller_DownloadsMsi_AndRunsIt()
     {
-        string? seen = null;
-        var ok = await SunshineInstaller.InstallAsync((args, _) => { seen = args; return Task.FromResult(0); }, CancellationToken.None);
+        string? ran = null;
+        var ok = await SunshineInstaller.InstallAsync(
+            download: _ => Task.FromResult<string?>(@"C:\temp\Sunshine-Windows-AMD64-installer.msi"),
+            run: (path, _) => { ran = path; return Task.FromResult(0); }, CancellationToken.None);
 
         Assert.True(ok);
-        Assert.Contains("install --id LizardByte.Sunshine --exact --silent", seen);
-        Assert.Contains("--accept-package-agreements", seen);
+        Assert.Equal(@"C:\temp\Sunshine-Windows-AMD64-installer.msi", ran);
     }
 
     [Fact]
-    public async Task SunshineInstaller_ReportsFailure_OnNonZeroExit()
+    public async Task SunshineInstaller_FailsWhenDownloadFails()
     {
-        var ok = await SunshineInstaller.InstallAsync((_, _) => Task.FromResult(1), CancellationToken.None);
+        var ran = false;
+        var ok = await SunshineInstaller.InstallAsync(
+            download: _ => Task.FromResult<string?>(null), run: (_, _) => { ran = true; return Task.FromResult(0); },
+            CancellationToken.None);
+
         Assert.False(ok);
+        Assert.False(ran); // ohne Datei kein msiexec
+    }
+
+    [Theory]
+    [InlineData(0, true)]      // Erfolg
+    [InlineData(3010, true)]   // Erfolg, Neustart nötig
+    [InlineData(1, false)]     // Fehler
+    public async Task SunshineInstaller_InterpretsExitCode(int code, bool expected)
+    {
+        var ok = await SunshineInstaller.InstallAsync(
+            download: _ => Task.FromResult<string?>("x.msi"), run: (_, _) => Task.FromResult(code), CancellationToken.None);
+        Assert.Equal(expected, ok);
+    }
+
+    // ───── Sunshine automatisch einrichten (proaktiv) ─────
+
+    [Fact]
+    public async Task Readiness_InstallsWhenPaired_AndNotYetInstalled()
+    {
+        var installed = false;
+        var calls = 0;
+        var svc = new SunshineReadinessService(NullLogger<SunshineReadinessService>.Instance,
+            isPaired: () => true, installed: () => installed, isGameRunning: () => false,
+            install: _ => { calls++; installed = true; return Task.FromResult(true); }, canInstall: true);
+
+        Assert.True(await svc.TryEnsureAsync(CancellationToken.None));
+        Assert.Equal(1, calls);
+    }
+
+    [Fact]
+    public async Task Readiness_SkipsWhenNotPaired_OrAlreadyInstalled_OrGameRunning()
+    {
+        var calls = 0;
+        Func<CancellationToken, Task<bool>> inst = _ => { calls++; return Task.FromResult(true); };
+        // nicht gekoppelt
+        Assert.False(await new SunshineReadinessService(NullLogger<SunshineReadinessService>.Instance,
+            isPaired: () => false, installed: () => false, isGameRunning: () => false, install: inst, canInstall: true).TryEnsureAsync(default));
+        // Spiel läuft
+        Assert.False(await new SunshineReadinessService(NullLogger<SunshineReadinessService>.Instance,
+            isPaired: () => true, installed: () => false, isGameRunning: () => true, install: inst, canInstall: true).TryEnsureAsync(default));
+        // schon installiert
+        Assert.True(await new SunshineReadinessService(NullLogger<SunshineReadinessService>.Instance,
+            isPaired: () => true, installed: () => true, isGameRunning: () => false, install: inst, canInstall: true).TryEnsureAsync(default));
+        Assert.Equal(0, calls); // in keinem Fall installiert
     }
 
     // ───── Panel-Ablage ─────

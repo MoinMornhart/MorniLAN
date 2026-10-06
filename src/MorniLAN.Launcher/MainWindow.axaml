@@ -83,9 +83,9 @@
         <TextBlock Text="{Binding WelcomeText}" FontSize="18" HorizontalAlignment="Center" Foreground="#9AA3B2"
                    TextWrapping="Wrap" TextAlignment="Center" MaxWidth="640" />
 
-        <!-- Panel-Adresse von Hand, falls die automatische Suche scheitert -->
+        <!-- Panel-Adresse von Hand, nur wenn der PC gerade KEIN Panel gefunden hat -->
         <Border Margin="0,20,0,0" Padding="22,18" CornerRadius="12" Background="#1A1E26" MaxWidth="560"
-                HorizontalAlignment="Center">
+                HorizontalAlignment="Center" IsVisible="{Binding ShowAddressField}">
           <StackPanel Spacing="10">
             <TextBlock Text="Panel nicht gefunden?" FontWeight="SemiBold" Foreground="#E8EAF0"
                        HorizontalAlignment="Center" />

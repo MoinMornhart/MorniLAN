@@ -134,6 +134,10 @@ public sealed partial class LauncherViewModel : ObservableObject
     partial void OnBackgroundImageChanged(Bitmap? value) => OnPropertyChanged(nameof(HasBackgroundImage));
 
     [ObservableProperty] public partial string WelcomeText { get; set; } = "Verbinde mit dem MorniLAN-Dienst …";
+
+    /// <summary>Adressfeld „Panel nicht gefunden?" nur zeigen, wenn der PC gerade KEIN Panel gefunden hat.</summary>
+    [ObservableProperty] public partial bool ShowAddressField { get; set; }
+
     [ObservableProperty] public partial string PairingHint { get; set; } = "";
     [ObservableProperty] public partial string PairingCode { get; set; } = "";
     [ObservableProperty] public partial string StatusText { get; set; } = "Verbinde mit dem MorniLAN-Dienst …";
@@ -313,6 +317,7 @@ public sealed partial class LauncherViewModel : ObservableObject
             StatusBrush = ProblemBrush;
             StatusText = "Der MorniLAN-Dienst läuft nicht. Bitte den Admin fragen.";
             WelcomeText = "Der MorniLAN-Dienst läuft nicht. Bitte den Admin fragen.";
+            ShowAddressField = false; // Dienst-Problem, kein Panel-Problem
             if (_all.Count == 0)
                 View = LauncherView.Welcome;
             return;
@@ -324,6 +329,7 @@ public sealed partial class LauncherViewModel : ObservableObject
             case AgentLinkState.Online:
                 StatusBrush = OnlineBrush;
                 StatusText = $"Verbunden mit {admin}";
+                ShowAddressField = false; // verbunden – Adressfeld ausblenden
                 break;
             case AgentLinkState.WaitingForPairing when status.PairingCode is { } code:
                 StatusBrush = WaitingBrush;
@@ -336,6 +342,8 @@ public sealed partial class LauncherViewModel : ObservableObject
                 // Gekoppelt, aber das Panel ist gerade aus: Kacheln und Profile gelten trotzdem (lokal gespeichert)
                 StatusBrush = OfflineBrush;
                 StatusText = "Admin-PC gerade nicht erreichbar";
+                // Nur wenn noch gar nichts geladen wurde, beim Suchen das Adressfeld anbieten
+                ShowAddressField = _all.Count == 0 && Profiles.Count == 0;
                 break;
         }
         if (_toast is not null && DateTimeOffset.UtcNow < _toastUntil)

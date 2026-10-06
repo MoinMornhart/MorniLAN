@@ -1,48 +1,89 @@
 using System.Diagnostics;
+using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
+using System.Text.Json;
+using MorniLAN.Shared;
 
 namespace MorniLAN.Agent.Remote;
 
 /// <summary>
-/// Richtet Sunshine (den Streaming-Host) bei Bedarf automatisch ein – über winget, das der Agent (als SYSTEM) ohnehin
-/// für Installationen nutzt. So muss der Admin Sunshine nicht von Hand installieren; verlangt er den Fernzugriff und
-/// Sunshine fehlt, holt der Agent es selbst. Das eigentliche Streaming testen wir zu zweit.
+/// Richtet Sunshine (den Streaming-Host) bei Bedarf automatisch ein: lädt die offizielle Windows-MSI von LizardByte
+/// direkt herunter und installiert sie still per <c>msiexec</c>. Bewusst NICHT über winget – das ist im Dienst-Kontext
+/// (SYSTEM) nicht verfügbar; msiexec läuft als SYSTEM problemlos. Das eigentliche Streaming testen wir zu zweit.
 /// </summary>
 internal static class SunshineInstaller
 {
-    /// <summary>winget-Paket-ID von Sunshine (LizardByte).</summary>
-    public const string WingetId = "LizardByte.Sunshine";
+    private const string Repo = "LizardByte/Sunshine";
 
-    /// <summary>Installiert Sunshine still per winget. true bei Erfolg (Exitcode 0).</summary>
-    public static Task<bool> InstallAsync(CancellationToken cancellationToken) => InstallAsync(RunWinget, cancellationToken);
+    private static readonly HttpClient Http = CreateClient();
 
-    internal static async Task<bool> InstallAsync(Func<string, CancellationToken, Task<int>> runWinget,
-        CancellationToken cancellationToken)
+    public static Task<bool> InstallAsync(CancellationToken cancellationToken) =>
+        InstallAsync(DownloadLatestMsiAsync, RunMsiexecAsync, cancellationToken);
+
+    /// <summary>download: lädt die MSI und gibt den Pfad zurück (oder null). run: msiexec, gibt den Exitcode zurück.</summary>
+    internal static async Task<bool> InstallAsync(Func<CancellationToken, Task<string?>> download,
+        Func<string, CancellationToken, Task<int>> run, CancellationToken cancellationToken)
     {
-        var args = $"install --id {WingetId} --exact --silent --accept-package-agreements --accept-source-agreements";
-        var code = await runWinget(args, cancellationToken);
-        return code == 0;
+        var msi = await download(cancellationToken);
+        if (msi is null)
+            return false;
+        var code = await run(msi, cancellationToken);
+        // 0 = Erfolg, 3010 = Erfolg, Neustart nötig (für Sunshine nicht zwingend sofort)
+        return code is 0 or 3010;
     }
 
-    private static async Task<int> RunWinget(string arguments, CancellationToken cancellationToken)
+    /// <summary>Neueste Sunshine-MSI passend zur Architektur herunterladen.</summary>
+    private static async Task<string?> DownloadLatestMsiAsync(CancellationToken cancellationToken)
     {
-        using var process = Process.Start(new ProcessStartInfo("winget", arguments)
+        var arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "ARM64" : "AMD64";
+        var assetName = $"Sunshine-Windows-{arch}-installer.msi";
+        try
+        {
+            await using var stream = await Http.GetStreamAsync(
+                $"https://api.github.com/repos/{Repo}/releases/latest", cancellationToken);
+            using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+            string? url = null;
+            foreach (var asset in json.RootElement.GetProperty("assets").EnumerateArray())
+            {
+                if (asset.TryGetProperty("name", out var name)
+                    && string.Equals(name.GetString(), assetName, StringComparison.OrdinalIgnoreCase)
+                    && asset.TryGetProperty("browser_download_url", out var downloadUrl))
+                {
+                    url = downloadUrl.GetString();
+                    break;
+                }
+            }
+            if (url is null)
+                return null;
+
+            var target = Path.Combine(AgentPaths.Data, "updates", assetName);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            var temp = target + ".download";
+            await using (var output = File.Create(temp))
+            await using (var input = await Http.GetStreamAsync(url, cancellationToken))
+                await input.CopyToAsync(output, cancellationToken);
+            File.Move(temp, target, overwrite: true);
+            return target;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or JsonException or TaskCanceledException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<int> RunMsiexecAsync(string msiPath, CancellationToken cancellationToken)
+    {
+        var log = Path.Combine(AgentPaths.Logs, "sunshine-install.log");
+        using var process = Process.Start(new ProcessStartInfo("msiexec",
+            $"/i \"{msiPath}\" /quiet /norestart /L*v \"{log}\"")
         {
             UseShellExecute = false,
             CreateNoWindow = true,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
         });
         if (process is null)
             return -1;
-
-        // Die Ausgabe nebenher leeren, sonst blockiert winget beim Schreiben (voller Pipe-Puffer) → Deadlock.
-        var drain = Task.WhenAll(
-            process.StandardOutput.ReadToEndAsync(cancellationToken),
-            process.StandardError.ReadToEndAsync(cancellationToken));
-
-        // Eigenes Timeout: Installationen hängen sonst unbegrenzt (Aufrufer gibt kein Token mit).
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromMinutes(10));
+        timeout.CancelAfter(TimeSpan.FromMinutes(15));
         try
         {
             await process.WaitForExitAsync(timeout.Token);
@@ -52,7 +93,14 @@ internal static class SunshineInstaller
             try { process.Kill(entireProcessTree: true); } catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception) { }
             return -1;
         }
-        try { await drain; } catch (Exception ex) when (ex is IOException or OperationCanceledException) { }
         return process.ExitCode;
+    }
+
+    private static HttpClient CreateClient()
+    {
+        var client = new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
+        client.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("MorniLAN", VersionInfo.Version));
+        client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+        return client;
     }
 }

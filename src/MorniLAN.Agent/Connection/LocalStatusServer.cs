@@ -27,31 +27,33 @@ internal sealed class LocalStatusServer(Func<string> payload, ILogger<LocalStatu
     {
         while (!stoppingToken.IsCancellationRequested)
         {
-            NamedPipeServerStream pipe;
+            // Der ganze Durchlauf in try/catch: KEIN einzelner Pipe-Fehler darf den Kanal dauerhaft töten,
+            // sonst bekommt der Launcher nie wieder eine Antwort (bis der Dienst neu startet).
             try
             {
-                pipe = NamedPipeServerStreamAcl.Create(pipeName, PipeDirection.Out,
+                var pipe = NamedPipeServerStreamAcl.Create(pipeName, PipeDirection.Out,
                     NamedPipeServerStream.MaxAllowedServerInstances, PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
                     0, 64 * 1024, CreateSecurity(grantCurrentUser));
+                try
+                {
+                    await pipe.WaitForConnectionAsync(stoppingToken);
+                }
+                catch
+                {
+                    await pipe.DisposeAsync();
+                    throw;
+                }
+                _ = AnswerAsync(pipe, stoppingToken);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
-                logger.LogWarning("Kanal {Pipe} für den Launcher nicht verfügbar ({Error}), neuer Versuch in 30 s", pipeName,
-                    ex.Message);
-                await Task.Delay(TimeSpan.FromSeconds(30), stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
-                continue;
-            }
-
-            try
-            {
-                await pipe.WaitForConnectionAsync(stoppingToken);
-            }
-            catch (OperationCanceledException)
-            {
-                await pipe.DisposeAsync();
                 return;
             }
-            _ = AnswerAsync(pipe, stoppingToken);
+            catch (Exception ex)
+            {
+                logger.LogWarning("Kanal {Pipe} für den Launcher gestört ({Error}), neuer Versuch gleich", pipeName, ex.Message);
+                await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken).ConfigureAwait(ConfigureAwaitOptions.SuppressThrowing);
+            }
         }
     }
 
