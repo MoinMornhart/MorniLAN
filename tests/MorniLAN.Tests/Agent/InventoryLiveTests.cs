@@ -61,11 +61,18 @@ public class InventoryLiveTests
         await inbox.StartAsync(ct);
         var catalog = new MorniLAN.Agent.Policy.LauncherCatalog(inventory, policy, profiles);
 
+        // Nachricht (M8): MORNILAN_PREVIEW_MESSAGE=<Text> zeigt ein Admin-Pop-up
+        var actions = new MorniLAN.Agent.Actions.ActionService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Actions.ActionService>.Instance,
+            runProcess: (_, _, _) => (0, ""));
+        if (Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_MESSAGE") is { Length: > 0 } msg)
+            await actions.RunAsync(new MorniLAN.Shared.Models.ShowMessageCommand("Nachricht vom Admin", msg), ct);
+
         var log = Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.LocalStatusServer>.Instance;
         using var status = new MorniLAN.Agent.Connection.LocalStatusServer(() => MorniLAN.Shared.Connection.LocalStatusPipe.Serialize(
             new MorniLAN.Shared.Connection.AgentLocalStatus(MorniLAN.Shared.Connection.AgentLinkState.Online, null, "Vorschau-Panel",
-                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash, inbox.Help, remote.State)), log, "MorniLAN.Preview",
-            grantCurrentUser: true);
+                Environment.MachineName, "Vorschau", DateTimeOffset.UtcNow, catalog.Current().Hash, inbox.Help, remote.State,
+                actions.CurrentMessage)), log, "MorniLAN.Preview", grantCurrentUser: true);
         using var apps = new MorniLAN.Agent.Connection.LocalStatusServer(
             () => MorniLAN.Shared.Connection.LauncherAppsPipe.Serialize(catalog.Current()), log, "MorniLAN.Preview.Apps",
             grantCurrentUser: true);

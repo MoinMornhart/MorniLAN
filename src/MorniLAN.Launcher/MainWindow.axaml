@@ -284,14 +284,22 @@
         </StackPanel>
       </ScrollViewer>
 
-      <!-- Nachricht vom Admin -->
-      <Border IsVisible="{Binding ShowMessage}" VerticalAlignment="Top" Margin="0,70,0,0" HorizontalAlignment="Center"
-              Background="#1A1E26" BorderBrush="#4C8DFF" BorderThickness="1" CornerRadius="12" Padding="24,18"
-              MaxWidth="640" ZIndex="40">
+      <!-- Nachricht vom Admin: Pop-up unten rechts (wie bei einer Fernwartung) -->
+      <Border IsVisible="{Binding ShowMessage}" VerticalAlignment="Bottom" HorizontalAlignment="Right"
+              Margin="0,0,24,24" Width="380" Background="#1A1E26" BorderBrush="#4C8DFF" BorderThickness="1"
+              CornerRadius="12" Padding="18,16" ZIndex="60" BoxShadow="0 8 24 0 #80000000">
         <StackPanel Spacing="10">
-          <TextBlock Text="{Binding MessageTitle}" FontSize="18" FontWeight="Bold" Foreground="#E8EAF0" />
+          <Grid ColumnDefinitions="Auto,*,Auto">
+            <Border Width="26" Height="26" CornerRadius="13" Background="#4C8DFF" VerticalAlignment="Top">
+              <TextBlock Text="M" FontWeight="Bold" Foreground="#0F1115" HorizontalAlignment="Center" VerticalAlignment="Center" />
+            </Border>
+            <TextBlock Grid.Column="1" Margin="10,0" Text="{Binding MessageTitle}" FontSize="16" FontWeight="Bold"
+                       Foreground="#E8EAF0" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <Button Grid.Column="2" Content="✕" Padding="8,2" Background="Transparent" Foreground="#9AA3B2"
+                    VerticalAlignment="Top" Command="{Binding DismissMessageCommand}" AutomationProperties.Name="Schließen" />
+          </Grid>
           <TextBlock Text="{Binding MessageText}" Foreground="#E8EAF0" TextWrapping="Wrap" />
-          <Button Content="OK" HorizontalAlignment="Right" Command="{Binding DismissMessageCommand}" />
+          <Button Content="OK" HorizontalAlignment="Right" Classes="accent" Command="{Binding DismissMessageCommand}" />
         </StackPanel>
       </Border>
 
