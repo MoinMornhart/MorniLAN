@@ -152,6 +152,26 @@ public class InventoryLiveTests
         await inbox.StopAsync(CancellationToken.None);
     }
 
+    /// <summary>Fragt die ECHTEN Launcher-Pipes dieses PCs ab (Diagnose: warum zeigt der Launcher nichts?).</summary>
+    [Fact(Explicit = true)]
+    public async Task Live_QueryRealLauncherPipes()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var o = TestContext.Current.TestOutputHelper!;
+        var status = await MorniLAN.Shared.Connection.LocalStatusPipe.QueryAsync(TimeSpan.FromSeconds(3), ct);
+        o.WriteLine(status is null
+            ? "STATUS: NULL (Status-Pipe nicht erreichbar)"
+            : $"STATUS: {status.State}  Admin={status.AdminName}  AppsHash={status.AppsHash ?? "null"}");
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var apps = await MorniLAN.Shared.Connection.LauncherAppsPipe.QueryAsync(TimeSpan.FromSeconds(20), ct);
+        o.WriteLine($"APPS nach {sw.ElapsedMilliseconds} ms: " + (apps is null
+            ? "NULL (Timeout/Fehler auf der Apps-Pipe!)"
+            : $"{apps.Apps.Length} Kacheln, {apps.Profiles?.Length ?? 0} Profile, Hash={apps.Hash}"));
+        if (apps is not null)
+            foreach (var a in apps.Apps.Take(25))
+                o.WriteLine($"   - {a.Name}  (Spiel={a.IsGame}, Cover={a.Cover?.Length ?? 0} B, Icon={a.Icon?.Length ?? 0} B)");
+    }
+
     /// <summary>Fragt die Vorschau-Pipes wie der Launcher ab und zählt Aussetzer.</summary>
     [Fact(Explicit = true)]
     public async Task Live_QueryPreviewPipes()

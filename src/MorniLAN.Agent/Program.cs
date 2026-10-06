@@ -98,6 +98,10 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RestrictionService>());
 builder.Services.AddSingleton<MorniLAN.Agent.Remote.RemoteAccessService>();
+// Sunshine (Fernzugriff) automatisch im Hintergrund einrichten, sobald das Gerät gekoppelt ist
+builder.Services.AddHostedService(sp => new MorniLAN.Agent.Remote.SunshineReadinessService(
+    sp.GetRequiredService<ILogger<MorniLAN.Agent.Remote.SunshineReadinessService>>(),
+    () => sp.GetRequiredService<AgentStateStore>().Current.Admin is not null));
 builder.Services.AddSingleton<MorniLAN.Agent.Actions.ActionService>();
 builder.Services.AddSingleton<AgentUpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
@@ -107,14 +111,17 @@ builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscoveryListener>
 builder.Services.AddHostedService<AgentWorker>();
 builder.Services.AddSingleton<AdminConnectionService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AdminConnectionService>());
-// Zwei Kanäle zum Launcher: Status (klein, alle 2 s) und freigegebene Apps mit Bildern (nur bei Änderung)
-builder.Services.AddHostedService(sp =>
+// Zwei Kanäle zum Launcher: Status (klein, alle 2 s) und freigegebene Apps mit Bildern (nur bei Änderung).
+// WICHTIG: direkt als IHostedService registrieren, NICHT über AddHostedService – das nutzt TryAddEnumerable und
+// würde den zweiten Dienst gleichen Typs (LocalStatusServer) als Duplikat verwerfen. Dann liefe nur der Status-
+// Kanal, der Apps-Kanal fehlte, und der Launcher bekäme nie seine Kacheln.
+builder.Services.AddSingleton<IHostedService>(sp =>
 {
     var connection = sp.GetRequiredService<AdminConnectionService>();
     return new LocalStatusServer(() => LocalStatusPipe.Serialize(connection.LocalStatus()),
         sp.GetRequiredService<ILogger<LocalStatusServer>>());
 });
-builder.Services.AddHostedService(sp =>
+builder.Services.AddSingleton<IHostedService>(sp =>
 {
     var catalog = sp.GetRequiredService<LauncherCatalog>();
     return new LocalStatusServer(() => LauncherAppsPipe.Serialize(catalog.Current()),

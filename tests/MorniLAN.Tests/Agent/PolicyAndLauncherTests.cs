@@ -1,3 +1,5 @@
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using MorniLAN.Admin.Server;
 using MorniLAN.Agent.Connection;
@@ -174,6 +176,29 @@ public sealed class PolicyAndLauncherTests : IDisposable
         {
             await server.StopAsync(CancellationToken.None);
         }
+    }
+
+    /// <summary>
+    /// Regression: Status- und Apps-Kanal sind beide ein LocalStatusServer. AddHostedService nutzt TryAddEnumerable
+    /// und würde den zweiten (gleicher Typ) als Duplikat verwerfen – dann liefe nur der Status-Kanal und der Launcher
+    /// bekäme nie seine Kacheln. Program.cs registriert sie darum direkt als IHostedService (kein TryAddEnumerable).
+    /// </summary>
+    [Fact]
+    public void BothLauncherChannels_RegisterAsHostedService_NotDedupedByType()
+    {
+        var log = NullLogger<LocalStatusServer>.Instance;
+
+        var deduped = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        deduped.AddHostedService(_ => new LocalStatusServer(() => "a", log, "MorniLAN.Test.A"));
+        deduped.AddHostedService(_ => new LocalStatusServer(() => "b", log, "MorniLAN.Test.B"));
+        using var dedupedSp = deduped.BuildServiceProvider();
+        Assert.Single(dedupedSp.GetServices<IHostedService>()); // AddHostedService verwirft den zweiten – das wäre der Bug
+
+        var both = new Microsoft.Extensions.DependencyInjection.ServiceCollection();
+        both.AddSingleton<IHostedService>(_ => new LocalStatusServer(() => "a", log, "MorniLAN.Test.A"));
+        both.AddSingleton<IHostedService>(_ => new LocalStatusServer(() => "b", log, "MorniLAN.Test.B"));
+        using var bothSp = both.BuildServiceProvider();
+        Assert.Equal(2, bothSp.GetServices<IHostedService>().Count()); // so macht es Program.cs – beide laufen
     }
 
     [Fact]
