@@ -128,6 +128,19 @@ public sealed class PolicyAndLauncherTests : IDisposable
         Assert.DoesNotContain(blocked.Apps, a => a.Name == "Discord");
     }
 
+    [Fact]
+    public void Catalog_OmitsHiddenApps_ButKeepsThemUnblocked()
+    {
+        var hidden = LauncherCatalog.Build(Apps, AppPolicy.Default.WithHidden(["exe:discord"], true, T0), Image);
+        // Ausgeblendet: keine Kachel …
+        Assert.DoesNotContain(hidden.Apps, a => a.Name == "Discord");
+        // … aber nicht gesperrt (Freigabe unberührt)
+        Assert.True(AppPolicy.Default.WithHidden(["exe:discord"], true, T0).IsAllowed("exe:discord"));
+        // Wieder einblenden bringt die Kachel zurück
+        var shown = LauncherCatalog.Build(Apps, AppPolicy.Default.WithHidden(["exe:discord"], true, T0).WithHidden(["exe:discord"], false, T0), Image);
+        Assert.Contains(shown.Apps, a => a.Name == "Discord");
+    }
+
     /// <summary>
     /// Der Launcher fragt alle 2 s: Jede Abfrage muss sofort beantwortet werden, nicht nur die erste.
     /// Nur mit vollen Rechten des Servers wie im Dienst (SYSTEM): Im beschnittenen Testmodus darf das Konto keine

@@ -39,7 +39,7 @@ internal sealed class LauncherCatalog(InventoryService inventory, AgentPolicySto
         // Ohne Profile gilt der PC, mit Profilen nur noch die Profile
         string?[] audience = people.Length == 0 ? [null] : [.. people.Select(p => p.Id)];
         var tiles = apps
-            .Where(a => !a.IsSystemComponent && a.LaunchTarget is not null)
+            .Where(a => !a.IsSystemComponent && !policy.IsHidden(a.Id) && a.LaunchTarget is not null)
             .Select(a => (App: a, Hidden: audience.Where(p => !policy.IsAllowed(a.Id, p)).Select(p => p ?? LauncherAppList.NoProfile).ToArray()))
             .Where(x => x.Hidden.Length < audience.Length)
             .OrderByDescending(x => x.App.IsGame)

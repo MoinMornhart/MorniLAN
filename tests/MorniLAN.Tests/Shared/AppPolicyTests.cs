@@ -66,7 +66,8 @@ public class AppPolicyTests
     public void Json_RoundTrip()
     {
         var policy = AppPolicy.Default.WithAllowed(["exe:1"], false, T0)
-            .WithCustomApp(new CustomApp("custom:1", "Tool", @"C:\Tool\tool.exe", "--fast"), T0);
+            .WithCustomApp(new CustomApp("custom:1", "Tool", @"C:\Tool\tool.exe", "--fast"), T0)
+            .WithHidden(["exe:2"], true, T0);
 
         var json = JsonSerializer.Serialize(policy, MorniLanJsonContext.Default.AppPolicy);
         var back = JsonSerializer.Deserialize(json, MorniLanJsonContext.Default.AppPolicy)!;
@@ -74,5 +75,54 @@ public class AppPolicyTests
         Assert.Equal(policy.Revision, back.Revision);
         Assert.False(back.IsAllowed("exe:1"));
         Assert.Equal("--fast", Assert.Single(back.CustomApps).Arguments);
+        Assert.True(back.IsHidden("exe:2"));
+    }
+
+    // ───── Ausblenden (Aufräumen) ─────
+
+    [Fact]
+    public void Hidden_ToggleAndSurvivesOldJson()
+    {
+        var policy = AppPolicy.Default.WithHidden(["exe:1", "exe:2"], true, T0);
+        Assert.True(policy.IsHidden("EXE:1")); // Groß-/Kleinschreibung egal
+        Assert.True(policy.IsHidden("exe:2"));
+        Assert.False(policy.IsHidden("exe:3"));
+        // Ausblenden sperrt nicht
+        Assert.True(policy.IsAllowed("exe:1"));
+
+        var shown = policy.WithHidden(["exe:1"], false, T0);
+        Assert.False(shown.IsHidden("exe:1"));
+        Assert.True(shown.IsHidden("exe:2"));
+
+        const string old = """{"revision":1,"allowByDefault":true,"rules":[],"customApps":[],"updatedAt":"2026-10-06T05:00:00+00:00"}""";
+        var loaded = JsonSerializer.Deserialize(old, MorniLanJsonContext.Default.AppPolicy)!;
+        Assert.False(loaded.IsHidden("exe:1"));
+    }
+
+    [Theory]
+    [InlineData("Microsoft Visual C++ 2015-2022 Redistributable (x64)", AppSource.InstalledProgram, null, AppNoise.Runtime)]
+    [InlineData(".NET Runtime 8.0", AppSource.InstalledProgram, null, AppNoise.Runtime)]
+    [InlineData("Realtek Audio Console", AppSource.InstalledProgram, "Realtek", AppNoise.Driver)]
+    [InlineData("NVIDIA Grafiktreiber", AppSource.InstalledProgram, "NVIDIA", AppNoise.Driver)]
+    [InlineData("Irgendwas", AppSource.InstalledProgram, "Intel Corporation", AppNoise.Driver)]
+    [InlineData("Cortana", AppSource.StoreApp, "Microsoft Corporation", AppNoise.WindowsStore)]
+    [InlineData("Discord Updater", AppSource.InstalledProgram, "Discord Inc.", AppNoise.Background)]
+    [InlineData("Steam", AppSource.InstalledProgram, "Valve", null)]
+    [InlineData("Minecraft", AppSource.Custom, null, null)]
+    public void AppNoise_Classifies(string name, AppSource source, string? publisher, string? expected)
+    {
+        var app = new AppEntry("id:" + name, name, source, Publisher: publisher,
+            ExecutablePath: source == AppSource.InstalledProgram ? @"C:\x\y.exe" : null);
+        Assert.Equal(expected, AppNoise.Classify(app));
+    }
+
+    [Fact]
+    public void AppNoise_NeverSuggestsGames()
+    {
+        // Ein Spiel aus einem Launcher, auch wenn der Name ein Muster enthielte
+        var steam = new AppEntry("steam:1", "Driver San Francisco", AppSource.Steam, SteamAppId: 1);
+        var epic = new AppEntry("epic:1", "Realtek Racing", AppSource.InstalledProgram, Launcher: GameLaunchers.Epic, Publisher: "Realtek");
+        Assert.Null(AppNoise.Classify(steam));
+        Assert.Null(AppNoise.Classify(epic));
     }
 }

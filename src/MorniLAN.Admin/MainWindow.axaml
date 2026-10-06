@@ -410,6 +410,51 @@
             </StackPanel>
           </Border>
 
+          <!-- Aufräumen: unnötige Apps erkennen und auf Bestätigung ausblenden -->
+          <Border Classes="card" IsVisible="{Binding Apps.HasDevice}">
+            <StackPanel Spacing="10">
+              <Grid ColumnDefinitions="*,Auto">
+                <StackPanel VerticalAlignment="Center">
+                  <TextBlock Text="Aufräumen" Classes="h2" />
+                  <TextBlock Text="{Binding Apps.SuggestionSummary}" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <Button Grid.Column="1" VerticalAlignment="Center" IsVisible="{Binding Apps.HasSuggestions}"
+                        Content="Vorschläge ansehen" Command="{Binding Apps.ToggleSuggestionsCommand}" />
+              </Grid>
+
+              <StackPanel Spacing="8" IsVisible="{Binding Apps.ShowSuggestions}">
+                <TextBlock Classes="muted" TextWrapping="Wrap"
+                           Text="Angehakte Einträge werden nur aus der Ansicht genommen (nicht gesperrt, bleiben installiert). Einzelne kannst du abwählen." />
+                <Border Background="#15181E" CornerRadius="10" Padding="6" MaxHeight="280">
+                  <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding Apps.Suggestions}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:SuggestionRowViewModel">
+                          <CheckBox IsChecked="{Binding IsChecked}" Margin="4,2">
+                            <StackPanel>
+                              <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                              <TextBlock Text="{Binding Details}" Classes="label" />
+                            </StackPanel>
+                          </CheckBox>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </ScrollViewer>
+                </Border>
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                  <Button Content="Alle an/aus" Command="{Binding Apps.SelectAllSuggestionsCommand}" />
+                  <Button Content="Ausgewählte ausblenden" Classes="accent" Command="{Binding Apps.HideSelectedCommand}" />
+                  <TextBlock Text="{Binding Apps.CleanupMessage}" Classes="muted" VerticalAlignment="Center" />
+                </StackPanel>
+              </StackPanel>
+
+              <Grid ColumnDefinitions="Auto,*,Auto" IsVisible="{Binding Apps.HasHidden}">
+                <ToggleSwitch IsChecked="{Binding Apps.ShowHidden}" OnContent="Ausgeblendete anzeigen" OffContent="Ausgeblendete anzeigen" />
+                <Button Grid.Column="2" Content="Alle wieder einblenden" Command="{Binding Apps.UnhideAllCommand}" VerticalAlignment="Center" />
+              </Grid>
+            </StackPanel>
+          </Border>
+
           <Grid ColumnDefinitions="*,Auto,Auto">
             <TextBox Text="{Binding Apps.SearchText}" PlaceholderText="Suchen nach Name oder Hersteller …" />
             <ComboBox Grid.Column="1" Margin="10,0,0,0" SelectedIndex="{Binding Apps.FilterIndex}" MinWidth="150">
@@ -471,7 +516,7 @@
               <ItemsControl ItemsSource="{Binding Apps.Apps}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:AppItemViewModel">
-                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="8,6">
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" Margin="8,6">
                       <Panel Width="36" Height="36" Margin="0,0,14,0" VerticalAlignment="Center" Opacity="{Binding Opacity}">
                         <Image Source="{Binding Icon}" IsVisible="{Binding HasIcon}" Width="32" Height="32" />
                         <Border IsVisible="{Binding !HasIcon}" CornerRadius="8" Background="#262B35">
@@ -491,7 +536,11 @@
                               VerticalAlignment="Center"
                               Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Apps.RemoveCustomCommand}"
                               CommandParameter="{Binding}" />
-                      <ToggleSwitch Grid.Column="4" Margin="12,0,0,0" MinWidth="130" IsChecked="{Binding IsAllowed}" AutomationProperties.Name="{Binding Name}"
+                      <Button Grid.Column="4" Margin="10,0,0,0" Content="{Binding HideButtonText}" VerticalAlignment="Center"
+                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Apps.ToggleHiddenCommand}"
+                              CommandParameter="{Binding}"
+                              ToolTip.Tip="Nur aus Ansicht und Launcher nehmen (nicht sperren)" />
+                      <ToggleSwitch Grid.Column="5" Margin="12,0,0,0" MinWidth="130" IsChecked="{Binding IsAllowed}" AutomationProperties.Name="{Binding Name}"
                                     OnContent="freigegeben" OffContent="gesperrt" VerticalAlignment="Center" />
                     </Grid>
                   </DataTemplate>
