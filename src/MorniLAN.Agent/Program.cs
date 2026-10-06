@@ -84,6 +84,7 @@ builder.Services.AddSingleton(sp =>
 });
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RestrictionService>());
 builder.Services.AddSingleton<MorniLAN.Agent.Remote.RemoteAccessService>();
+builder.Services.AddSingleton<MorniLAN.Agent.Actions.ActionService>();
 builder.Services.AddSingleton<AgentUpdateService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<AgentUpdateService>());
 builder.Services.AddSingleton<DiscoveryListener>();

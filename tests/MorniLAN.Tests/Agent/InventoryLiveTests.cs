@@ -110,11 +110,15 @@ public class InventoryLiveTests
         {
             DataDirectory = data, AdminHost = "127.0.0.1", AdminPort = 47950, EnableDiscovery = false,
         };
+        // Aktionen (M8): No-Op – echte Programme werden im Vorschau-Test NICHT installiert
+        var actions = new MorniLAN.Agent.Actions.ActionService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Actions.ActionService>.Instance,
+            runProcess: (_, _, _) => (0, "(Vorschau: nichts ausgeführt)"));
         var agent = new MorniLAN.Agent.Connection.AdminConnectionService(Microsoft.Extensions.Options.Options.Create(options),
             new MorniLAN.Agent.Connection.AgentStateStore(data),
             MorniLAN.Agent.Connection.AgentIdentity.LoadOrCreate(data, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance),
             new MorniLAN.Agent.Platform.SystemStatusCollector(), Microsoft.Extensions.Logging.Abstractions.NullLogger<MorniLAN.Agent.Connection.AdminConnectionService>.Instance,
-            inventory: inventory, policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions);
+            inventory: inventory, policy: policy, profiles: profiles, inbox: inbox, restrictions: restrictions, actions: actions);
         await inbox.StartAsync(ct);
         using var restrictionsCts = new CancellationTokenSource();
         await restrictions.StartAsync(restrictionsCts.Token);

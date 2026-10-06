@@ -35,6 +35,7 @@ namespace MorniLAN.Shared.Serialization;
 [JsonSerializable(typeof(DeviceStatus))]
 [JsonSerializable(typeof(AdminCommand))]
 [JsonSerializable(typeof(CommandResult))]
+[JsonSerializable(typeof(AdminMessage))]
 [JsonSerializable(typeof(HelloRequest))]
 [JsonSerializable(typeof(HelloResponse))]
 [JsonSerializable(typeof(PairingRequest))]
