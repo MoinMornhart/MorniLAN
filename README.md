@@ -52,6 +52,34 @@ Portfreigaben am Router.
 > funktionieren bereits. Offen für den ersten stabilen Release sind vor allem die Tests zu zweit mit einem echten
 > zweiten PC (Bild-Streaming, echte Installationen). Siehe [Fahrplan](#fahrplan).
 
+## So sieht's für deinen Freund aus
+
+Dein Freund sieht **nicht** den Windows-Desktop, sondern einen aufgeräumten Vollbild-Launcher – wie bei einer Konsole.
+Anmelden, Profil wählen, spielen. Kein Explorer, keine Systemeinstellungen, nichts zum Kaputtmachen.
+
+**„Wer spielt?“** – Mehrere Profile pro PC, jedes mit eigener Farbe, „Zuletzt gespielt“ und optionalem Passwort. Jeder
+gestaltet sein Profil selbst (Farbe, Gaming-Hintergrund, Avatar).
+
+<p align="center">
+  <img src="docs/images/launcher-profile.jpg" width="820" alt="Launcher-Startbildschirm Wer spielt? mit den Profilen Lena, Max und Papa">
+</p>
+
+**Seine Spiele und Apps – als Kacheln.** Alle freigegebenen Spiele, egal aus welchem Launcher (Steam, Epic, GOG,
+Ubisoft, EA, Battle.net), mit Cover; dazu die erlaubten Programme als Icons. Ein Klick (oder A am Controller) startet.
+Bedienbar mit Maus, Tastatur **und Controller** (Y = Suchen). Unten eine Leiste mit Hilfe-Knopf, WLAN, Lautstärke,
+Uhr und Ausschalten.
+
+<p align="center">
+  <img src="docs/images/launcher-bibliothek.jpg" width="900" alt="Launcher mit Spiele-Kacheln (Assassin's Creed Valhalla, Battlefield, Factorio, Fortnite, Hogwarts Legacy, Overwatch, The Witcher 3) und App-Icons">
+</p>
+
+**Immer transparent.** Greifst du aus der Ferne zu, sieht dein Freund **immer** einen deutlichen roten Balken. Und du
+kannst ihm eine Nachricht schicken, die als Pop-up unten rechts erscheint – wie bei einer Fernwartung.
+
+<p align="center">
+  <img src="docs/images/launcher-fernzugriff.jpg" width="900" alt="Launcher mit rotem Balken „Fernzugriff durch den Admin läuft“ und einer Admin-Nachricht unten rechts">
+</p>
+
 ## So funktioniert's
 
 MorniLAN besteht aus **zwei Apps**:
