@@ -35,23 +35,29 @@ internal static class UserPolicyWriter
     public static void Clear(string sid) => Apply(sid, new HashSet<string>());
 
     /// <summary>
-    /// Macht den Launcher zum Desktop des Kontos: setzt die benutzereigene Shell (Winlogon\Shell). Windows nimmt
-    /// diesen Wert statt explorer.exe – kein Startmenü, keine Taskleiste. <paramref name="shellCommand"/> null
-    /// entfernt den Wert wieder, dann startet beim nächsten Anmelden wieder der normale Windows-Desktop.
-    /// Wirkt bei der nächsten Anmeldung des Kontos (eine laufende Sitzung bleibt, bis man sich neu anmeldet).
+    /// Macht den Launcher zum Desktop des Kontos (Shell-Ersatz statt explorer.exe – kein Startmenü, keine Taskleiste).
+    /// Gesetzt wird die Richtlinie „Benutzerdefinierte Oberfläche" (<c>Policies\System\Shell</c>) – das ist der
+    /// zuverlässige, dokumentierte Weg für eine benutzereigene Shell; das frühere <c>Winlogon\Shell</c> ehrt Windows
+    /// pro Benutzer nicht. Winlogon\Shell wird zusätzlich gesetzt (schadet nicht). <paramref name="shellCommand"/> null
+    /// entfernt beides wieder → normaler Desktop. Wirkt bei der nächsten Anmeldung des Kontos.
     /// </summary>
     public static void SetShell(string sid, string? shellCommand) =>
         WithUserHive(sid, root =>
         {
             if (string.IsNullOrWhiteSpace(shellCommand))
             {
-                using var key = root.OpenSubKey(Winlogon, writable: true);
-                key?.DeleteValue("Shell", throwOnMissingValue: false);
+                using (var sys = root.OpenSubKey(System, writable: true))
+                    sys?.DeleteValue("Shell", throwOnMissingValue: false);
+                using var wl = root.OpenSubKey(Winlogon, writable: true);
+                wl?.DeleteValue("Shell", throwOnMissingValue: false);
             }
             else
             {
-                using var key = root.CreateSubKey(Winlogon);
-                key.SetValue("Shell", shellCommand, RegistryValueKind.String);
+                // Benutzerdefinierte Oberfläche (greift zuverlässig pro Benutzer)
+                using (var sys = root.CreateSubKey(System))
+                    sys.SetValue("Shell", shellCommand, RegistryValueKind.String);
+                using var wl = root.CreateSubKey(Winlogon);
+                wl.SetValue("Shell", shellCommand, RegistryValueKind.String);
             }
         });
 
