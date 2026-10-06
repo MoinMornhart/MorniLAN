@@ -52,6 +52,12 @@ public static class GitHubReleases
     {
         var url = $"https://api.github.com/repos/{MorniLanConstants.GitHubRepository}/releases?per_page=15";
         var cache = cacheDirectory is null ? null : ReleaseCache.Read(cacheDirectory);
+        // Korrupten Cache (abgeschnittener Body) sofort verwerfen – sonst matcht sein ETag ewig und 304 wirft beim Parsen
+        if (cache is not null && !IsValidJson(cache.Body))
+        {
+            ReleaseCache.Delete(cacheDirectory!);
+            cache = null;
+        }
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         if (cache is not null && EntityTagHeaderValue.TryParse(cache.ETag, out var etag))
@@ -77,6 +83,12 @@ public static class GitHubReleases
     {
         using var json = JsonDocument.Parse(body);
         return Parse(json.RootElement);
+    }
+
+    private static bool IsValidJson(string text)
+    {
+        try { using var _ = JsonDocument.Parse(text); return true; }
+        catch (JsonException) { return false; }
     }
 
     /// <summary>GitHub meldet beim Limit 403 mit X-RateLimit-Remaining: 0 (nicht jeder 403 ist das Limit).</summary>
@@ -140,9 +152,18 @@ public static class GitHubReleases
         var target = Path.Combine(folder, Path.GetFileName(update.Setup.Name));
         var temp = target + ".download";
 
-        await using (var output = File.Create(temp))
-        await using (var input = await Http.GetStreamAsync(update.Setup.DownloadUrl, cancellationToken))
-            await input.CopyToAsync(output, cancellationToken);
+        try
+        {
+            await using (var output = File.Create(temp))
+            await using (var input = await Http.GetStreamAsync(update.Setup.DownloadUrl, cancellationToken))
+                await input.CopyToAsync(output, cancellationToken);
+        }
+        catch
+        {
+            // Bei Abbruch/IO-Fehler keine halbe Datei zurücklassen
+            try { File.Delete(temp); } catch (IOException) { }
+            throw;
+        }
 
         string actual;
         await using (var check = File.OpenRead(temp))

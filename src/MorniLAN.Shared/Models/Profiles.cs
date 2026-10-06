@@ -203,7 +203,10 @@ public static class LauncherInbox
     {
         public const int MaxHostLength = 120;
 
-        /// <summary>Fehlertext oder null. Erlaubt Hostnamen, IPv4/IPv6 und optional ":Port" – nichts Exotisches.</summary>
+        /// <summary>
+        /// Fehlertext oder null. Erlaubt Hostnamen und IPv4 – ohne Port (den Standard-Port setzt der Agent selbst;
+        /// ein angehängter „:Port" würde nicht greifen, darum lehnen wir „:" ab statt ihn still zu verschlucken).
+        /// </summary>
         public static string? Validate(string? host)
         {
             var value = host?.Trim();
@@ -211,6 +214,8 @@ public static class LauncherInbox
                 return "Bitte eine Adresse eingeben, z. B. 192.168.1.50 oder admin-pc.";
             if (value.Length > MaxHostLength)
                 return "Die Adresse ist zu lang.";
+            if (value.Contains(':'))
+                return "Bitte nur die Adresse ohne Port eingeben, z. B. 192.168.1.50.";
             if (value.Any(c => char.IsControl(c) || c is ' ' or '/' or '\\' or '"' or '\''))
                 return "Die Adresse enthält ungültige Zeichen.";
             return null;

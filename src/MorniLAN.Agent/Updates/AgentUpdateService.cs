@@ -59,8 +59,15 @@ internal sealed class AgentUpdateService : BackgroundService
     /// <summary>Vom Admin angestoßen: sofort prüfen und (wenn kein Spiel läuft) installieren.</summary>
     public void RequestNow()
     {
-        if (_trigger.CurrentCount == 0)
-            _trigger.Release();
+        // Zwei gleichzeitige Aufrufe (zwei Klicks/zwei Panels) könnten sonst beide Release() rufen → Exception
+        try
+        {
+            if (_trigger.CurrentCount == 0)
+                _trigger.Release();
+        }
+        catch (SemaphoreFullException)
+        {
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

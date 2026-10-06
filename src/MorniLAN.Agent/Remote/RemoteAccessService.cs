@@ -136,12 +136,13 @@ internal sealed class RemoteAccessService(
                 return;
             _installing = true;
         }
-        Set(new RemoteSessionState(RemoteSessionPhase.Unavailable, false, null,
-            "Sunshine wird automatisch eingerichtet – das dauert ein paar Minuten …", _time.GetUtcNow()));
-        logger.LogInformation("Sunshine fehlt – wird per winget eingerichtet");
-        bool ok;
+        var ok = false;
         try
         {
+            // Innerhalb des try, damit ein werfender StateChanged-Handler _installing nicht dauerhaft blockiert
+            Set(new RemoteSessionState(RemoteSessionPhase.Unavailable, false, null,
+                "Sunshine wird automatisch eingerichtet – das dauert ein paar Minuten …", _time.GetUtcNow()));
+            logger.LogInformation("Sunshine fehlt – wird per winget eingerichtet");
             ok = await _installSunshine(CancellationToken.None);
         }
         catch (Exception ex)
@@ -155,16 +156,25 @@ internal sealed class RemoteAccessService(
                 _installing = false;
         }
 
-        if (ok && _sunshineInstalled())
+        // Nach dem finally (also mit _installing == false), damit der fortgesetzte Start sauber durchläuft.
+        // Alles gekapselt, weil diese Methode als fire-and-forget läuft und keine Exception verlieren soll.
+        try
         {
-            logger.LogInformation("Sunshine eingerichtet, Fernzugriff wird fortgesetzt");
-            Start(allowWithoutConsent);
+            if (ok && _sunshineInstalled())
+            {
+                logger.LogInformation("Sunshine eingerichtet, Fernzugriff wird fortgesetzt");
+                Start(allowWithoutConsent);
+            }
+            else
+            {
+                Set(new RemoteSessionState(RemoteSessionPhase.Unavailable, false, null,
+                    "Sunshine ließ sich nicht automatisch einrichten. Bitte einmal von Hand installieren (winget: LizardByte.Sunshine).",
+                    _time.GetUtcNow()));
+            }
         }
-        else
+        catch (Exception ex)
         {
-            Set(new RemoteSessionState(RemoteSessionPhase.Unavailable, false, null,
-                "Sunshine ließ sich nicht automatisch einrichten. Bitte einmal von Hand installieren (winget: LizardByte.Sunshine).",
-                _time.GetUtcNow()));
+            logger.LogWarning("Fernzugriff nach Sunshine-Einrichtung nicht fortgesetzt: {Error}", ex.Message);
         }
     }
 
