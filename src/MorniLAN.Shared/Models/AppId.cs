@@ -23,6 +23,17 @@ public static class AppId
         return $"exe:{Convert.ToHexStringLower(hash.AsSpan(0, 8))}";
     }
 
+    /// <summary>
+    /// Spiel über die ID des Launchers (z. B. "epic:fortnite", "gog:1207658924"): bleibt gleich, auch wenn das
+    /// Spiel auf ein anderes Laufwerk umzieht.
+    /// </summary>
+    public static string ForLauncher(string prefix, string launcherId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(prefix);
+        ArgumentException.ThrowIfNullOrWhiteSpace(launcherId);
+        return $"{prefix}:{launcherId.Trim().ToLowerInvariant()}";
+    }
+
     public static string ForCustom(Guid id) => $"custom:{id:N}";
 
     /// <summary>Store-App über ihre AppUserModelId (Familienname + App-ID, versionsunabhängig).</summary>

@@ -10,9 +10,12 @@ internal sealed record ImageSources(string? IconFromExecutable = null, string? I
 internal sealed record InventoryItem(AppEntry App, ImageSources Images);
 
 /// <summary>
-/// Führt Steam-Spiele, Uninstall-Einträge, Startmenü-Verknüpfungen und Store-Apps zu einer Liste zusammen.
+/// Führt Steam-Spiele, Spiele anderer Launcher, Uninstall-Einträge, Startmenü-Verknüpfungen und Store-Apps zu
+/// einer Liste zusammen.
 /// <list type="bullet">
-/// <item>Steam-Spiele kommen nur einmal (nicht zusätzlich als "Steam App 123" oder über ihre Verknüpfung).</item>
+/// <item>Spiele kommen nur einmal (nicht zusätzlich als "Steam App 123", als Programmeintrag in ihrem Ordner
+///   oder über ihre Verknüpfung).</item>
+/// <item>Spiele der EA app und von Battle.net werden in der Programmliste erkannt und als Spiel markiert.</item>
 /// <item>Verknüpfungen werden Programmen zugeordnet: zuerst über den Ordner (Installationsort, Ordner des Icons
 ///   oder Uninstallers; der genaueste gewinnt), dann über den Namen.</item>
 /// <item>Ein Programm mit genau einer Verknüpfung wird ein Eintrag mit deren EXE; mit mehreren (Office, Git)
@@ -26,7 +29,8 @@ internal static partial class InventoryBuilder
         IReadOnlyList<SteamGame> steamGames,
         IReadOnlyList<UninstallEntry> uninstallEntries,
         IReadOnlyList<StartMenuShortcut> shortcuts,
-        IReadOnlyList<StoreApp> storeApps)
+        IReadOnlyList<StoreApp> storeApps,
+        IReadOnlyList<LauncherGame>? launcherGames = null)
     {
         var items = new Dictionary<string, InventoryItem>(StringComparer.OrdinalIgnoreCase);
         void Add(InventoryItem item) => items.TryAdd(item.App.Id, item);
@@ -38,25 +42,41 @@ internal static partial class InventoryBuilder
                     SizeBytes: game.SizeOnDisk > 0 ? game.SizeOnDisk : null),
                 new ImageSources(IconFile: game.IconPath, CoverFile: game.CoverPath)));
         }
-        var steamFolders = steamGames.Select(g => g.InstallDirectory).ToList();
-        bool InSteamGame(string? path) => path is not null && steamFolders.Any(f => PathText.IsUnder(path, f));
+        foreach (var game in launcherGames ?? [])
+        {
+            Add(new InventoryItem(
+                new AppEntry(AppId.ForLauncher(game.IdPrefix, game.LauncherId), game.Name, AppSource.InstalledProgram,
+                    ExecutablePath: game.ExecutablePath, SizeBytes: game.SizeBytes, LaunchArguments: game.LaunchArguments,
+                    Launcher: game.Launcher, LaunchUri: game.LaunchUri),
+                new ImageSources(IconFromExecutable: game.ExecutablePath, IconFile: game.IconFile, CoverFile: game.CoverFile)));
+        }
 
-        var programs = uninstallEntries.Where(e => !SteamAppKey().IsMatch(e.KeyName)).ToList();
+        // Verknüpfungen und Programmeinträge in einem Spielordner sind dasselbe Spiel noch einmal
+        var gameFolders = steamGames.Select(g => g.InstallDirectory)
+            .Concat((launcherGames ?? []).Select(g => g.InstallDirectory))
+            .Where(f => !PathText.IsGenericFolder(f))
+            .ToList();
+        bool InGameFolder(string? path) => path is not null && gameFolders.Any(f => PathText.IsUnder(path, f));
+
+        var programs = uninstallEntries
+            .Where(e => !SteamAppKey().IsMatch(e.KeyName) && !InGameFolder(e.InstallLocation))
+            .ToList();
         var links = shortcuts
             .Select(s => s with { TargetPath = PathText.Normalize(s.TargetPath) })
-            .Where(s => !InSteamGame(s.TargetPath))
+            .Where(s => !InGameFolder(s.TargetPath))
             .ToList();
         var assignment = Assign(programs, links);
 
         foreach (var entry in programs)
         {
             var own = assignment.Where(a => a.Value == entry).Select(a => a.Key).ToList();
-            var system = SystemComponents.IsSystem(entry);
+            var launcher = LauncherDetection.ForUninstallEntry(entry);
+            var system = launcher is null && SystemComponents.IsSystem(entry);
             if (own.Count >= 2)
             {
                 // Paket mit mehreren Programmen (Office, Git, …): jedes einzeln anzeigen
                 foreach (var link in own)
-                    Add(FromShortcut(link, entry.Publisher, entry.Version, system));
+                    Add(FromShortcut(link, entry.Publisher, entry.Version, system, launcher));
                 continue;
             }
 
@@ -64,7 +84,7 @@ internal static partial class InventoryBuilder
             var exe = shortcut?.TargetPath ?? PathText.ExecutableFromIcon(entry.DisplayIcon);
             if (PathText.IsUninstaller(exe))
                 exe = null;
-            if (InSteamGame(exe))
+            if (InGameFolder(exe))
                 continue;
 
             Add(new InventoryItem(
@@ -73,12 +93,12 @@ internal static partial class InventoryBuilder
                     Publisher: entry.Publisher, Version: entry.Version,
                     // ohne startbare EXE kann der Launcher es ohnehin nicht öffnen
                     IsSystemComponent: system || exe is null || SystemComponents.IsSystemPath(exe),
-                    LaunchArguments: shortcut?.Arguments),
+                    LaunchArguments: shortcut?.Arguments, Launcher: exe is null ? null : launcher),
                 new ImageSources(IconFromExecutable: exe ?? PathText.ExecutableFromIcon(entry.DisplayIcon))));
         }
 
         foreach (var link in links.Where(l => !assignment.ContainsKey(l)))
-            Add(FromShortcut(link, null, null, false));
+            Add(FromShortcut(link, null, null, false, null));
 
         foreach (var app in storeApps)
         {
@@ -97,10 +117,12 @@ internal static partial class InventoryBuilder
             .OrderBy(i => i.App.Name, StringComparer.CurrentCultureIgnoreCase)];
     }
 
-    private static InventoryItem FromShortcut(StartMenuShortcut link, string? publisher, string? version, bool system) =>
+    private static InventoryItem FromShortcut(StartMenuShortcut link, string? publisher, string? version, bool system,
+        string? launcher) =>
         new(new AppEntry(AppId.ForExecutable(link.TargetPath), link.Name, AppSource.InstalledProgram,
                 ExecutablePath: link.TargetPath, Publisher: publisher, Version: version,
-                IsSystemComponent: system || SystemComponents.IsSystemPath(link.TargetPath), LaunchArguments: link.Arguments),
+                IsSystemComponent: system || SystemComponents.IsSystemPath(link.TargetPath), LaunchArguments: link.Arguments,
+                Launcher: launcher),
             new ImageSources(IconFromExecutable: link.TargetPath));
 
     /// <summary>Ordnet jede Verknüpfung höchstens einem Programm zu.</summary>

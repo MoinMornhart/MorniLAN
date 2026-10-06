@@ -25,6 +25,38 @@ public class InventoryLiveTests
         Assert.NotEmpty(result.Items);
     }
 
+    /// <summary>Holt echte Cover aus dem Steam-Shop (braucht Internet).</summary>
+    [Fact(Explicit = true)]
+    public async Task Live_StoreCovers()
+    {
+        var dir = Directory.CreateTempSubdirectory("mornilan-live-covers");
+        try
+        {
+            var service = new StoreCoverService(dir.FullName);
+            InventoryItem Game(string name, string launcher) => new(
+                new MorniLAN.Shared.Models.AppEntry("x:" + name, name, MorniLAN.Shared.Models.AppSource.InstalledProgram,
+                    Launcher: launcher), new ImageSources());
+
+            var items = await service.FillAsync(
+            [
+                Game("Assassin’s Creed® Valhalla", MorniLAN.Shared.Models.GameLaunchers.Ubisoft), // Hochformat
+                Game("Battlefield™ 6", MorniLAN.Shared.Models.GameLaunchers.Ea), // nur Platzhalter → Querformat
+                Game("Fortnite", MorniLAN.Shared.Models.GameLaunchers.Epic), // gibt es auf Steam nicht
+            ], TestContext.Current.CancellationToken);
+
+            foreach (var item in items)
+                TestContext.Current.TestOutputHelper!.WriteLine(
+                    $"{item.App.Name}: {(item.Images.CoverFile is { } f ? $"{new FileInfo(f).Length:N0} Bytes" : "kein Cover")}");
+            Assert.True(new FileInfo(items[0].Images.CoverFile!).Length > 20_000);
+            Assert.True(new FileInfo(items[1].Images.CoverFile!).Length > 20_000);
+            Assert.Null(items[2].Images.CoverFile);
+        }
+        finally
+        {
+            dir.Delete(recursive: true);
+        }
+    }
+
     /// <summary>
     /// Füllt ein Admin-Datenverzeichnis mit der echten Liste dieses PCs (als Gerät „Vorschau“), um die Seite
     /// „Freigaben“ ohne zweiten PC anzusehen. Ziel: Umgebungsvariable MORNILAN_PREVIEW_DIR.
@@ -34,7 +66,17 @@ public class InventoryLiveTests
     {
         var target = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_DIR")
                      ?? throw new InvalidOperationException("MORNILAN_PREVIEW_DIR setzen");
-        var service = new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance);
+        // MORNILAN_PREVIEW_SAMPLES=1: zusätzlich Beispiel-Spiele aus den anderen Launchern (gibt es auf diesem PC nicht)
+        var samples = Environment.GetEnvironmentVariable("MORNILAN_PREVIEW_SAMPLES") == "1";
+        var service = samples
+            ? new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance,
+                () =>
+                {
+                    var real = InventoryCollector.Collect();
+                    return real with { Items = [.. real.Items, .. SampleLauncherGames()] };
+                },
+                new StoreCoverService(Path.Combine(target, "preview-covers")))
+            : new InventoryService(Microsoft.Extensions.Logging.Abstractions.NullLogger<InventoryService>.Instance);
         var report = await service.RefreshAsync(TestContext.Current.CancellationToken);
 
         var store = new MorniLAN.Admin.Server.InventoryStore(target);
@@ -47,5 +89,22 @@ public class InventoryLiveTests
             if (service.GetImage(hash) is { } image && store.TrySaveImage(image))
                 saved++;
         TestContext.Current.TestOutputHelper!.WriteLine($"{report.Apps.Length} Einträge, {saved} Bilder nach {target}");
+    }
+
+    private static IEnumerable<InventoryItem> SampleLauncherGames()
+    {
+        (string Name, string Launcher, string Prefix)[] games =
+        [
+            ("Fortnite", MorniLAN.Shared.Models.GameLaunchers.Epic, "epic"),
+            ("Hogwarts Legacy", MorniLAN.Shared.Models.GameLaunchers.Epic, "epic"),
+            ("The Witcher 3: Wild Hunt", MorniLAN.Shared.Models.GameLaunchers.Gog, "gog"),
+            ("Assassin’s Creed® Valhalla", MorniLAN.Shared.Models.GameLaunchers.Ubisoft, "ubisoft"),
+            ("Battlefield™ 6", MorniLAN.Shared.Models.GameLaunchers.Ea, "ea"),
+            ("Overwatch® 2", MorniLAN.Shared.Models.GameLaunchers.BattleNet, "bnet"),
+        ];
+        return games.Select(g => new InventoryItem(
+            new MorniLAN.Shared.Models.AppEntry(MorniLAN.Shared.Models.AppId.ForLauncher(g.Prefix, g.Name), g.Name,
+                MorniLAN.Shared.Models.AppSource.InstalledProgram, Publisher: "Beispiel für die Vorschau", Launcher: g.Launcher),
+            new ImageSources()));
     }
 }

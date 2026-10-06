@@ -58,7 +58,7 @@ public class AdminUpdaterTests
             for (var i = 0; i < 20; i++)
             {
                 try { dir.Delete(recursive: true); break; }
-                catch (IOException) { await Task.Delay(100); }
+                catch (IOException) { await Task.Delay(100, TestContext.Current.CancellationToken); }
             }
         }
     }

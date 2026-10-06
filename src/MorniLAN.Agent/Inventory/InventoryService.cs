@@ -7,11 +7,17 @@ using MorniLAN.Shared.Serialization;
 namespace MorniLAN.Agent.Inventory;
 
 /// <summary>Hält die aktuelle Programmliste samt Bildern bereit. Es läuft immer nur ein Einlesen gleichzeitig.</summary>
-internal sealed class InventoryService(ILogger<InventoryService> logger, Func<InventoryCollector.Result>? collect = null)
+/// <param name="covers">Cover aus dem Steam-Shop. Ohne eigene Sammelfunktion (also im echten Betrieb) automatisch an.</param>
+internal sealed class InventoryService(
+    ILogger<InventoryService> logger,
+    Func<InventoryCollector.Result>? collect = null,
+    StoreCoverService? covers = null)
 {
     private readonly ImageService _images = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Func<InventoryCollector.Result> _collect = collect ?? InventoryCollector.Collect;
+    private readonly StoreCoverService? _covers =
+        covers ?? (collect is null ? new StoreCoverService(Path.Combine(AgentPaths.Data, "covers")) : null);
     private InventoryReport? _current;
 
     public InventoryReport? Current => Volatile.Read(ref _current);
@@ -32,17 +38,28 @@ internal sealed class InventoryService(ILogger<InventoryService> logger, Func<In
         try
         {
             var watch = Stopwatch.StartNew();
-            var report = await Task.Run(() =>
+            var report = await Task.Run(async () =>
             {
                 var result = _collect();
                 foreach (var problem in result.Problems)
                     logger.LogWarning("Programmliste: {Problem}", problem);
-                var apps = result.Items.Select(_images.WithImages).ToArray();
+                var items = result.Items;
+                if (_covers is not null)
+                {
+                    try { items = await _covers.FillAsync(items, cancellationToken); }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        logger.LogWarning(ex, "Programmliste: Cover aus dem Steam-Shop nicht geladen");
+                    }
+                }
+                var apps = items.Select(_images.WithImages).ToArray();
                 return new InventoryReport(DateTimeOffset.UtcNow, apps, ContentHash(apps));
             }, cancellationToken);
-            logger.LogInformation("Programmliste: {Count} Einträge, davon {Visible} sichtbar ({Games} Steam-Spiele), {Ms} ms",
+            logger.LogInformation(
+                "Programmliste: {Count} Einträge, davon {Visible} sichtbar ({Steam} Steam-Spiele, {Other} aus anderen Launchern), {Ms} ms",
                 report.Apps.Length, report.Apps.Count(a => !a.IsSystemComponent),
-                report.Apps.Count(a => a.Source == AppSource.Steam), watch.ElapsedMilliseconds);
+                report.Apps.Count(a => a.Source == AppSource.Steam), report.Apps.Count(a => a.Launcher is not null),
+                watch.ElapsedMilliseconds);
             Volatile.Write(ref _current, report);
             return report;
         }
