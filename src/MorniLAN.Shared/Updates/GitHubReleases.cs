@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text.Json;
@@ -34,13 +35,54 @@ public static class GitHubReleases
     public static string SetupPrefix(UpdateProduct product) =>
         product == UpdateProduct.Admin ? "MorniLAN-Admin-Setup-" : "MorniLAN-Geraete-Setup-";
 
-    public static async Task<IReadOnlyList<ReleaseInfo>> FetchAsync(CancellationToken cancellationToken)
+    public static Task<IReadOnlyList<ReleaseInfo>> FetchAsync(CancellationToken cancellationToken) =>
+        FetchAsync(cancellationToken, cacheDirectory: null);
+
+    /// <summary>
+    /// Fragt die Releases. Mit <paramref name="cacheDirectory"/> wird der letzte Stand samt ETag gemerkt: Die
+    /// nächste Abfrage schickt „If-None-Match"; bei 304 (unverändert) spart das die erneute Übertragung der ganzen
+    /// Liste. Vor allem aber: Ist das Stunden-Limit erreicht (403, 60/h pro Adresse – bei mehreren Geräten im selben
+    /// Netz schnell erreicht), gilt lieber der letzte bekannte Stand als ein harter Fehler.
+    /// </summary>
+    public static Task<IReadOnlyList<ReleaseInfo>> FetchAsync(CancellationToken cancellationToken, string? cacheDirectory) =>
+        FetchAsync(Http, cancellationToken, cacheDirectory);
+
+    internal static async Task<IReadOnlyList<ReleaseInfo>> FetchAsync(HttpClient http, CancellationToken cancellationToken,
+        string? cacheDirectory)
     {
         var url = $"https://api.github.com/repos/{MorniLanConstants.GitHubRepository}/releases?per_page=15";
-        await using var stream = await Http.GetStreamAsync(url, cancellationToken);
-        using var json = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        var cache = cacheDirectory is null ? null : ReleaseCache.Read(cacheDirectory);
+
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        if (cache is not null && EntityTagHeaderValue.TryParse(cache.ETag, out var etag))
+            request.Headers.IfNoneMatch.Add(etag);
+
+        using var response = await http.SendAsync(request, cancellationToken);
+
+        // Unverändert: der gemerkte Stand gilt, ohne das Limit zu belasten
+        if (response.StatusCode == HttpStatusCode.NotModified && cache is not null)
+            return ParseBody(cache.Body);
+        // Limit erreicht: lieber der letzte bekannte Stand als ein harter Fehler
+        if (response.StatusCode == HttpStatusCode.Forbidden && cache is not null && IsRateLimited(response))
+            return ParseBody(cache.Body);
+
+        response.EnsureSuccessStatusCode();
+        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+        if (cacheDirectory is not null && response.Headers.ETag is { } newEtag)
+            ReleaseCache.Write(cacheDirectory, newEtag.ToString(), body);
+        return ParseBody(body);
+    }
+
+    private static IReadOnlyList<ReleaseInfo> ParseBody(string body)
+    {
+        using var json = JsonDocument.Parse(body);
         return Parse(json.RootElement);
     }
+
+    /// <summary>GitHub meldet beim Limit 403 mit X-RateLimit-Remaining: 0 (nicht jeder 403 ist das Limit).</summary>
+    private static bool IsRateLimited(HttpResponseMessage response) =>
+        response.Headers.TryGetValues("X-RateLimit-Remaining", out var values)
+        && values.FirstOrDefault() == "0";
 
     /// <summary>Entwürfe und Releases ohne gültige Versionsnummer werden übergangen.</summary>
     internal static IReadOnlyList<ReleaseInfo> Parse(JsonElement releases)

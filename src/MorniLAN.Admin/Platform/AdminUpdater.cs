@@ -23,7 +23,7 @@ internal sealed class AdminUpdater
     /// <summary>Fragt GitHub. Wirft bei Netzfehlern, der Aufrufer zeigt die Meldung an.</summary>
     public async Task CheckAsync(CancellationToken cancellationToken = default)
     {
-        var releases = await GitHubReleases.FetchAsync(cancellationToken);
+        var releases = await GitHubReleases.FetchAsync(cancellationToken, Path.Combine(AdminPaths.Data, "updates"));
         AdminUpdate = GitHubReleases.FindUpdate(releases, CurrentVersion, UpdateProduct.Admin, IncludePrereleases);
         // Neueste Geräte-Version überhaupt (Vergleich je PC macht die Oberfläche)
         NewestDeviceRelease = GitHubReleases.FindUpdate(releases, SemanticVersion.Parse("0.0.0"), UpdateProduct.Device,
@@ -48,7 +48,8 @@ internal sealed class AdminUpdater
         var folder = Path.Combine(AdminPaths.Data, "updates");
         var setup = await GitHubReleases.DownloadAsync(update, folder, cancellationToken);
         var log = Path.Combine(AdminPaths.Logs, $"update-{update.Version}.log");
-        var script = LaunchScript(Environment.ProcessId, setup, log);
+        var panelExe = Environment.ProcessPath ?? "";
+        var script = LaunchScript(Environment.ProcessId, setup, log, panelExe);
         var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
         var process = Process.Start(new ProcessStartInfo("powershell.exe",
             $"-NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -EncodedCommand {encoded}")
@@ -64,10 +65,15 @@ internal sealed class AdminUpdater
     /// Wartet, bis das Panel wirklich beendet ist (der Server-Stopp dauert bis zu 5 s), und startet erst dann
     /// das stille Setup. Mit fester Wartezeit brach das Setup ab, weil die Dateien noch belegt waren.
     /// Nach 60 s geht es trotzdem los; dann schließt das Setup das Panel selbst (CloseApplications=force).
+    /// Selbstheilung: Läuft nach dem Setup kein Panel (Setup fehlgeschlagen oder nicht neu gestartet), startet das
+    /// Skript die vorhandene Panel-Exe selbst wieder – so steht man nie ohne Panel da.
     /// </summary>
-    internal static string LaunchScript(int panelProcessId, string setup, string log) =>
+    internal static string LaunchScript(int panelProcessId, string setup, string log, string panelExe) =>
         $"Wait-Process -Id {panelProcessId} -Timeout 60 -ErrorAction SilentlyContinue; " +
-        $"Start-Process -FilePath {Quote(setup)} -ArgumentList {Quote($"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=\"{log}\"")}";
+        $"Start-Process -Wait -FilePath {Quote(setup)} -ArgumentList {Quote($"/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG=\"{log}\"")}; " +
+        "Start-Sleep -Seconds 5; " +
+        "if (-not (Get-Process -Name 'MorniLAN.Admin' -ErrorAction SilentlyContinue)) " +
+        $"{{ if (Test-Path {Quote(panelExe)}) {{ Start-Process -FilePath {Quote(panelExe)} }} }}";
 
     private static string Quote(string value) => $"'{value.Replace("'", "''")}'";
 }

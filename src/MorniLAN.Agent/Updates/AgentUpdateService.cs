@@ -23,19 +23,23 @@ internal sealed class AgentUpdateService : BackgroundService
     private readonly bool _canInstall;
     private readonly Func<AvailableUpdate, CancellationToken, Task<string>> _download;
     private readonly Action<string, string> _launch;
+    private readonly string _dataDir;
+    private readonly Func<string> _runningVersion;
+    private readonly TimeProvider _time;
     private readonly SemaphoreSlim _trigger = new(0, 1);
     private AgentUpdateState _state = new(UpdatePhase.Unknown, "Noch nicht geprüft", null, DateTimeOffset.UtcNow);
 
     public AgentUpdateService(ILogger<AgentUpdateService> logger)
-        : this(logger, GitHubReleases.FetchAsync, SteamActivity.IsGameRunning, WindowsServiceHelpers.IsWindowsService(),
+        : this(logger, ct => GitHubReleases.FetchAsync(ct, Path.Combine(AgentPaths.Data, "updates")),
+            SteamActivity.IsGameRunning, WindowsServiceHelpers.IsWindowsService(),
             (update, ct) => GitHubReleases.DownloadAsync(update, Path.Combine(AgentPaths.Data, "updates"), ct),
-            (setup, log) => GitHubReleases.StartSilentInstall(setup, log))
+            (setup, log) => GitHubReleases.StartSilentInstall(setup, log), AgentPaths.Data)
     {
     }
 
     internal AgentUpdateService(ILogger<AgentUpdateService> logger, Func<CancellationToken, Task<IReadOnlyList<ReleaseInfo>>> fetch,
         Func<bool> isGameRunning, bool canInstall, Func<AvailableUpdate, CancellationToken, Task<string>> download,
-        Action<string, string> launch)
+        Action<string, string> launch, string dataDir, Func<string>? runningVersion = null, TimeProvider? time = null)
     {
         _download = download;
         _launch = launch;
@@ -43,6 +47,9 @@ internal sealed class AgentUpdateService : BackgroundService
         _fetch = fetch;
         _isGameRunning = isGameRunning;
         _canInstall = canInstall;
+        _dataDir = dataDir;
+        _runningVersion = runningVersion ?? (() => VersionInfo.Version);
+        _time = time ?? TimeProvider.System;
     }
 
     public AgentUpdateState State => Volatile.Read(ref _state);
@@ -58,6 +65,7 @@ internal sealed class AgentUpdateService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        VerifyPreviousUpdate();
         var wait = InitialDelay;
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -66,6 +74,25 @@ internal sealed class AgentUpdateService : BackgroundService
 
             wait = await CheckAndInstallAsync(stoppingToken) ? GameRetry : CheckInterval;
         }
+    }
+
+    /// <summary>
+    /// Prüft nach einem Neustart, ob das zuletzt gestartete Update wirklich angekommen ist (Marker vom letzten Mal).
+    /// Läuft jetzt die Zielversion → Erfolg. Läuft noch die alte → Update nicht durchgekommen, melden und beim
+    /// nächsten Durchlauf erneut versuchen. In jedem Fall wird der Marker danach entfernt.
+    /// </summary>
+    internal void VerifyPreviousUpdate()
+    {
+        if (UpdateMarker.Read(_dataDir) is not { } pending)
+            return;
+        var current = _runningVersion();
+        if (string.Equals(current, pending.TargetVersion, StringComparison.OrdinalIgnoreCase))
+            Set(UpdatePhase.UpToDate, $"✓ auf v{current} aktualisiert");
+        else
+            Set(UpdatePhase.Failed,
+                $"Update auf v{pending.TargetVersion} hat nicht gegriffen – weiter auf v{current}, neuer Versuch folgt",
+                pending.TargetVersion);
+        UpdateMarker.Clear(_dataDir);
     }
 
     /// <summary>Ein Durchlauf. true = später erneut versuchen (Spiel läuft).</summary>
@@ -105,6 +132,8 @@ internal sealed class AgentUpdateService : BackgroundService
             }
             Set(UpdatePhase.Installing, $"Installiere v{version}, der Dienst startet gleich neu", version);
             _logger.LogInformation("Starte Update auf v{Version}: {Setup}", version, setup);
+            // Marker, damit der neu gestartete Dienst prüfen kann, ob das Update wirklich griff
+            UpdateMarker.Write(_dataDir, version, _time.GetUtcNow());
             _launch(setup, Path.Combine(AgentPaths.Logs, $"update-{version}.log"));
             return false;
         }

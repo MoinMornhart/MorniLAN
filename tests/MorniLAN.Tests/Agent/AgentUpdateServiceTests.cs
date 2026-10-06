@@ -2,12 +2,16 @@ using Microsoft.Extensions.Logging.Abstractions;
 using MorniLAN.Agent.Updates;
 using MorniLAN.Shared;
 using MorniLAN.Shared.Updates;
+using MorniLAN.Tests.Connection;
 
 namespace MorniLAN.Tests.Agent;
 
-public class AgentUpdateServiceTests
+public sealed class AgentUpdateServiceTests : IDisposable
 {
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
+    private readonly TempDirectory _dir = new();
+
+    public void Dispose() => _dir.Dispose();
 
     /// <summary>Ein Release, das garantiert neuer ist als die laufende Testversion.</summary>
     private static IReadOnlyList<ReleaseInfo> NewerRelease()
@@ -31,8 +35,8 @@ public class AgentUpdateServiceTests
         public List<UpdatePhase> Phases { get; } = [];
     }
 
-    private static (AgentUpdateService Service, Recorder Calls) Create(IReadOnlyList<ReleaseInfo> releases, Func<bool> gameRunning,
-        bool canInstall = true)
+    private (AgentUpdateService Service, Recorder Calls) Create(IReadOnlyList<ReleaseInfo> releases, Func<bool> gameRunning,
+        bool canInstall = true, Func<string>? runningVersion = null)
     {
         var calls = new Recorder();
         var service = new AgentUpdateService(NullLogger<AgentUpdateService>.Instance,
@@ -42,7 +46,7 @@ public class AgentUpdateServiceTests
                 calls.Downloads.Add(update.Setup.Name);
                 return Task.FromResult(@"C:\temp\" + update.Setup.Name);
             },
-            (setup, _) => calls.Launches.Add(setup));
+            (setup, _) => calls.Launches.Add(setup), _dir.Path, runningVersion);
         service.StateChanged += s => calls.Phases.Add(s.Phase);
         return (service, calls);
     }
@@ -107,7 +111,7 @@ public class AgentUpdateServiceTests
     {
         var service = new AgentUpdateService(NullLogger<AgentUpdateService>.Instance,
             _ => throw new HttpRequestException("kein Netz"), () => false, true,
-            (_, _) => Task.FromResult(""), (_, _) => { });
+            (_, _) => Task.FromResult(""), (_, _) => { }, _dir.Path);
         Assert.False(await service.CheckAndInstallAsync(Ct));
         Assert.Equal(UpdatePhase.Failed, service.State.Phase);
         Assert.Contains("kein Netz", service.State.Message);
@@ -120,5 +124,52 @@ public class AgentUpdateServiceTests
         var noDigest = new AvailableUpdate(release, release.Assets[0] with { Sha256 = null });
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             GitHubReleases.DownloadAsync(noDigest, Path.GetTempPath(), Ct));
+    }
+
+    // ───── Verifikation über den Neustart (Marker) ─────
+
+    [Fact]
+    public async Task Install_WritesPendingMarker_WithTargetVersion()
+    {
+        var (service, _) = Create(NewerRelease(), () => false);
+        await service.CheckAndInstallAsync(Ct);
+
+        var pending = UpdateMarker.Read(_dir.Path);
+        Assert.NotNull(pending);
+        Assert.Equal(service.State.AvailableVersion, pending.TargetVersion);
+    }
+
+    [Fact]
+    public void Verify_AfterRestart_OnNewVersion_ReportsSuccess_AndClearsMarker()
+    {
+        UpdateMarker.Write(_dir.Path, "9.9.9", DateTimeOffset.UtcNow);
+        var (service, _) = Create([], () => false, runningVersion: () => "9.9.9");
+
+        service.VerifyPreviousUpdate();
+
+        Assert.Equal(UpdatePhase.UpToDate, service.State.Phase);
+        Assert.StartsWith("✓", service.State.Message);
+        Assert.Null(UpdateMarker.Read(_dir.Path)); // Marker weg
+    }
+
+    [Fact]
+    public void Verify_AfterRestart_StillOldVersion_ReportsFailure_AndClearsMarker()
+    {
+        UpdateMarker.Write(_dir.Path, "9.9.9", DateTimeOffset.UtcNow);
+        var (service, _) = Create([], () => false, runningVersion: () => "0.1.0");
+
+        service.VerifyPreviousUpdate();
+
+        Assert.Equal(UpdatePhase.Failed, service.State.Phase);
+        Assert.Contains("9.9.9", service.State.Message);
+        Assert.Null(UpdateMarker.Read(_dir.Path));
+    }
+
+    [Fact]
+    public void Verify_WithoutMarker_DoesNothing()
+    {
+        var (service, _) = Create([], () => false);
+        service.VerifyPreviousUpdate();
+        Assert.Equal(UpdatePhase.Unknown, service.State.Phase); // unverändert
     }
 }
