@@ -1,3 +1,5 @@
+Lies zuerst den Projektstand: @STAND.md
+
 # CLAUDE.md – MorniLAN
 
 Kontext für Claude Code. Die vollständige Anforderung steht in [docs/anforderungen.md](docs/anforderungen.md); dort nachlesen, bevor ein Meilenstein geplant wird.
